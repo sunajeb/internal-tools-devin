@@ -229,6 +229,32 @@ describe('self-approval and approval steps', () => {
     expect(bySupervisor.statusCode, bySupervisor.body).toBe(201);
     expect(bySupervisor.json().tier).toBe('dual');
   });
+  it('rejects a decision on an expired approval', async () => {
+    const chargeId = await harness.charge(100_000n);
+    const created = await requestRefund(agent, chargeId, '30000');
+    expect(created.statusCode, created.body).toBe(201);
+    const approvalId = await approvalFor(created.json().id);
+    await harness.owner.query(
+      `UPDATE foundation.approval_requests
+       SET expires_at=now()-interval '1 day' WHERE id=$1`,
+      [approvalId],
+    );
+    const response = await harness.send(
+      supervisor,
+      'POST',
+      `/api/approvals/${approvalId}/approve`,
+      { body: {} },
+    );
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error).toBe('This approval has expired.');
+    const state = await harness.owner.query(
+      `SELECT status, (SELECT count(*)::int FROM foundation.approvals a
+         WHERE a.approval_request_id=r.id) AS decisions
+       FROM foundation.approval_requests r WHERE r.id=$1`,
+      [approvalId],
+    );
+    expect(state.rows[0]).toEqual({ status: 'pending', decisions: 0 });
+  });
 });
 
 describe('mass assignment and idempotency', () => {
@@ -473,6 +499,24 @@ describe('input handling', () => {
       cookie: 'sid=forged-session-id',
     });
     expect(response.json().authenticated).toBe(false);
+  });
+});
+
+describe('object access', () => {
+  it('hides refunds of other requesters from an Agent', async () => {
+    const chargeId = await harness.charge(100_000n);
+    const created = await requestRefund(supervisor, chargeId, '30000');
+    expect(created.statusCode, created.body).toBe(201);
+    const id = created.json().id as string;
+    const detail = await harness.send(agent, 'GET', `/api/refunds/${id}`);
+    expect(detail.statusCode).toBe(404);
+    const list = await harness.send(agent, 'GET', '/api/refunds');
+    expect(list.statusCode).toBe(200);
+    expect(
+      (list.json().items as { id: string }[]).map((item) => item.id),
+    ).not.toContain(id);
+    const owner = await harness.send(supervisor, 'GET', `/api/refunds/${id}`);
+    expect(owner.statusCode).toBe(200);
   });
 });
 

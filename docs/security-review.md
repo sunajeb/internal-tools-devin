@@ -1,6 +1,6 @@
 # Security review: Foundation and Refunds Console
 
-- Base: `devin/1791105966-foundation-refunds` (commit `a342626`).
+- Base: `devin/1791105966-foundation-refunds` (review started at `a342626`; branch updated to `9953df0`).
 - Date: 2026-10-04.
 - Method: source review, attacks on the local Docker Compose stack, and Vitest tests on the real Postgres.
 - Users: the six local Keycloak users. Data: synthetic seed data only.
@@ -8,9 +8,10 @@
 ## Summary
 
 - Critical: 0. High: 2. Medium: 11. Low: 14.
+- The base branch fixed SR-04 and SR-20 in `a2ee631` during this review. A test in this PR covers SR-04.
 - SR-01 (High) is open. One unauthenticated request stops the API process. The fix is in `apps/api/src/server.ts`. The shared rules lock that file. The exact patch is in this document.
 - SR-02 (High) is fixed in this PR. An Agent could split a large refund to avoid the Supervisor-only rule and dual approval.
-- Seven findings are in `packages/foundation/**`. This PR does not change Foundation code. Each finding has an exact proposed patch.
+- Seven findings are in `packages/foundation/**`. SR-04 is now fixed on the base. This PR does not change Foundation code. Each open Foundation finding has an exact proposed patch.
 - The main controls work: CSRF, self-approval denial (also for `agent-supervisor`), approval step order, webhook HMAC and replay window, idempotency binding, SQL parameters, mass-assignment protection, masking, log redaction, and audit immutability for `app_runtime`.
 
 ## How to run the tests
@@ -27,40 +28,40 @@ npm test
 
 ## Findings
 
-| ID    | Severity | Area                                           | Location                                | Status                          |
-| ----- | -------- | ---------------------------------------------- | --------------------------------------- | ------------------------------- |
-| SR-01 | High     | Unauthenticated request stops the API          | `apps/api/src/server.ts`                | Open (locked file, patch below) |
-| SR-02 | High     | Split refunds avoid dual approval              | `tools/refunds/src/api.ts`              | Fixed in this PR, test added    |
-| SR-03 | Medium   | Body `decision` overrides the approval route   | Foundation `runtime.ts`                 | Open (patch below)              |
-| SR-04 | Medium   | Expired approval can still be approved         | Foundation `runtime.ts`                 | Open (patch below)              |
-| SR-05 | Medium   | Client sets request ID; IDs repeat             | `server.ts`, `tools/refunds/src/api.ts` | Open (patch below)              |
-| SR-06 | Medium   | Login CSRF in OIDC callback                    | `server.ts`                             | Open (patch below)              |
-| SR-07 | Medium   | Session IDs stored in clear text               | `server.ts`, migration                  | Open (patch below)              |
-| SR-08 | Medium   | Default secrets outside `NODE_ENV=production`  | `server.ts`                             | Open (patch below)              |
-| SR-09 | Medium   | Rate limit keyed on proxy IP; no route limits  | `server.ts`                             | Open (patch below)              |
-| SR-10 | Medium   | Search confirms customer email without reveal  | `tools/refunds/src/api.ts`              | Open (patch below)              |
-| SR-11 | Medium   | `app_runtime` can rewrite approval records     | `apps/api/src/migrate.ts`               | Open (patch below)              |
-| SR-12 | Medium   | API container holds the owner DB URL           | `docker-compose.yml`                    | Open (patch below)              |
-| SR-13 | Medium   | Web UI has no frame protection                 | `apps/web/vite.config.ts`               | Open (patch below)              |
-| SR-14 | Low      | Validation runs before authorization           | Foundation `runtime.ts`                 | Open (patch below)              |
-| SR-15 | Low      | Approval lookup before authorization; 500      | Foundation `runtime.ts`                 | Open (patch below)              |
-| SR-16 | Low      | Hard-coded role bypass in `authorize`          | Foundation `registry.ts`                | Open (patch below)              |
-| SR-17 | Low      | Approval summary can overwrite list fields     | Foundation `runtime.ts`                 | Open (patch below)              |
-| SR-18 | Low      | Idempotency key has no length limit or expiry  | Foundation `runtime.ts`                 | Open (patch below)              |
-| SR-19 | Low      | Audit records the proxy IP                     | `server.ts`                             | Open (see SR-09)                |
-| SR-20 | Low      | Audit CSV writes `[object Object]`             | `server.ts`                             | Open (patch below)              |
-| SR-21 | Low      | Signed webhook with bad JSON returns 500       | `server.ts`                             | Open (see SR-01 patch)          |
-| SR-22 | Low      | Non-UUID IDs return 500                        | `tools/refunds/src/api.ts`              | Open (patch below)              |
-| SR-23 | Low      | Export denials are not audited                 | `tools/refunds/src/api.ts`              | Open                            |
-| SR-24 | Low      | Refund detail returns all columns              | `tools/refunds/src/api.ts`              | Open                            |
-| SR-25 | Low      | Unauthenticated `/api/registry` and `/metrics` | `server.ts`                             | Open                            |
-| SR-26 | Low      | User ID from `preferred_username`; stale roles | `server.ts`                             | Open                            |
-| SR-27 | Low      | Payment simulator refund list has no auth      | `services/payment-simulator`            | Open (local only)               |
+| ID    | Severity | Area                                           | Location                                | Status                                |
+| ----- | -------- | ---------------------------------------------- | --------------------------------------- | ------------------------------------- |
+| SR-01 | High     | Unauthenticated request stops the API          | `apps/api/src/server.ts`                | Open (locked file, patch below)       |
+| SR-02 | High     | Split refunds avoid dual approval              | `tools/refunds/src/api.ts`              | Fixed in this PR, test added          |
+| SR-03 | Medium   | Body `decision` overrides the approval route   | Foundation `runtime.ts`                 | Open (patch below)                    |
+| SR-04 | Medium   | Expired approval can still be approved         | Foundation `runtime.ts`                 | Fixed on base (`a2ee631`), test added |
+| SR-05 | Medium   | Client sets request ID; IDs repeat             | `server.ts`, `tools/refunds/src/api.ts` | Open (patch below)                    |
+| SR-06 | Medium   | Login CSRF in OIDC callback                    | `server.ts`                             | Open (patch below)                    |
+| SR-07 | Medium   | Session IDs stored in clear text               | `server.ts`, migration                  | Open (patch below)                    |
+| SR-08 | Medium   | Default secrets outside `NODE_ENV=production`  | `server.ts`                             | Open (patch below)                    |
+| SR-09 | Medium   | Rate limit keyed on proxy IP; no route limits  | `server.ts`                             | Open (patch below)                    |
+| SR-10 | Medium   | Search confirms customer email without reveal  | `tools/refunds/src/api.ts`              | Open (patch below)                    |
+| SR-11 | Medium   | `app_runtime` can rewrite approval records     | `apps/api/src/migrate.ts`               | Open (patch below)                    |
+| SR-12 | Medium   | API container holds the owner DB URL           | `docker-compose.yml`                    | Open (patch below)                    |
+| SR-13 | Medium   | Web UI has no frame protection                 | `apps/web/vite.config.ts`               | Open (patch below)                    |
+| SR-14 | Low      | Validation runs before authorization           | Foundation `runtime.ts`                 | Open (patch below)                    |
+| SR-15 | Low      | Approval lookup before authorization; 500      | Foundation `runtime.ts`                 | Open (patch below)                    |
+| SR-16 | Low      | Hard-coded role bypass in `authorize`          | Foundation `registry.ts`                | Open (patch below)                    |
+| SR-17 | Low      | Approval summary can overwrite list fields     | Foundation `runtime.ts`                 | Open (patch below)                    |
+| SR-18 | Low      | Idempotency key has no length limit or expiry  | Foundation `runtime.ts`                 | Open (patch below)                    |
+| SR-19 | Low      | Audit records the proxy IP                     | `server.ts`                             | Open (see SR-09)                      |
+| SR-20 | Low      | Audit CSV writes `[object Object]`             | `server.ts`                             | Fixed on base (`a2ee631`)             |
+| SR-21 | Low      | Signed webhook with bad JSON returns 500       | `server.ts`                             | Open (see SR-01 patch)                |
+| SR-22 | Low      | Non-UUID IDs return 500                        | `tools/refunds/src/api.ts`              | Open (patch below)                    |
+| SR-23 | Low      | Export denials are not audited                 | `tools/refunds/src/api.ts`              | Open                                  |
+| SR-24 | Low      | Refund detail returns all columns              | `tools/refunds/src/api.ts`              | Open                                  |
+| SR-25 | Low      | Unauthenticated `/api/registry` and `/metrics` | `server.ts`                             | Open                                  |
+| SR-26 | Low      | User ID from `preferred_username`; stale roles | `server.ts`                             | Open                                  |
+| SR-27 | Low      | Payment simulator refund list has no auth      | `services/payment-simulator`            | Open (local only)                     |
 
 ### SR-01 (High): one unauthenticated request stops the API process
 
 - Effect: any network caller can stop the API. The Compose API runs `tsx watch`. `tsx watch` does not restart after a crash, and the container stays `running`, so Docker does not restart it. All users lose the console until an operator restarts the container.
-- Cause: `fastify-raw-body` is registered with `encoding: false` and `runFirst: true` (`server.ts` lines 106-111). For a `text/plain` body on a `rawBody` route, `raw-body` gets a string chunk and calls `Buffer.concat` with it. This throws in a stream callback. Node stops the process. The signature check never runs.
+- Cause: `fastify-raw-body` is registered with `encoding: false` and `runFirst: true` (`server.ts` lines 111-116). For a `text/plain` body on a `rawBody` route, `raw-body` gets a string chunk and calls `Buffer.concat` with it. This throws in a stream callback. Node stops the process. The signature check never runs.
 - Evidence (no session, no signature):
 
 ```text
@@ -163,7 +164,7 @@ audit: approval.approved
 ```
 
 - Effect: a client, proxy rule, or WAF rule that allows only `/reject` can still approve money movement. Logs that show the URL do not show the real decision.
-- The Refunds UI sends both decisions to `/approve` with a body `decision` (`tools/refunds/src/web.tsx` line 1150). Change the UI first, then Foundation.
+- The Refunds UI sends both decisions to `/approve` with a body `decision` (`tools/refunds/src/web.tsx` line 1152). Change the UI first, then Foundation.
 - Proposed patch:
 
 ```diff
@@ -189,6 +190,8 @@ audit: approval.approved
 ```
 
 ### SR-04 (Medium): an expired approval can still be approved
+
+- Status: fixed on the base in `a2ee631` with the same check in SQL (`expires_at <= now() AS expired`). Test: `security-controls.test.ts` > "rejects a decision on an expired approval". The evidence and patch below apply to `a342626`.
 
 - Cause: `decide()` checks `status === 'pending'` but not `expires_at`. Only the worker expires approvals. If the worker is stopped or slow, an old approval stays open.
 - Evidence (worker stopped, owner set `expires_at` to yesterday):
@@ -221,8 +224,8 @@ SELECT status, expires_at < now() -> approved | t
 
 ### SR-05 (Medium): the client sets the request ID, and IDs repeat after a restart
 
-- Cause: `requestIdHeader: 'x-request-id'` (`server.ts` line 87). Fastify trusts the header. Without the header, Fastify uses `req-1`, `req-2`, ... and starts again at each restart.
-- The audit trail stores `request.id`. `POST /api/reconciliation/run` uses `reconciliation:${requestId}` as the outbox key (`tools/refunds/src/api.ts` line 398). The outbox ignores a duplicate key.
+- Cause: `requestIdHeader: 'x-request-id'` (`server.ts` line 92). Fastify trusts the header. Without the header, Fastify uses `req-1`, `req-2`, ... and starts again at each restart.
+- The audit trail stores `request.id`. `POST /api/reconciliation/run` uses `reconciliation:${requestId}` as the outbox key (`tools/refunds/src/api.ts` line 424). The outbox ignores a duplicate key.
 - Evidence:
 
 ```text
@@ -260,7 +263,7 @@ SELECT request_id, count(*) ... HAVING count(*) > 1  -> req-a|5, req-b|4, req-6|
 
 ### SR-06 (Medium): login CSRF in the OIDC callback
 
-- Cause: `/auth/callback` accepts any `state` that is in the in-memory `pendingAuth` map (`server.ts` lines 307-313). The state is not bound to the browser that started the sign-in.
+- Cause: `/auth/callback` accepts any `state` that is in the in-memory `pendingAuth` map (`server.ts` lines 312-318). The state is not bound to the browser that started the sign-in.
 - Attack: the attacker starts `/auth/login`, signs in to Keycloak with the attacker account, and stops before the callback. The attacker sends the callback URL to the victim. The victim's browser gets a session for the attacker account. Work that the victim does next is recorded under the attacker identity.
 - Evidence: the test login script completes `/auth/callback` with a new cookie jar. The `/auth/login` response sets no cookie.
 - Also: unauthenticated `/auth/login` calls add entries to `pendingAuth` with no upper limit. Entries are removed only on the next login after 5 minutes.
@@ -294,7 +297,7 @@ SELECT request_id, count(*) ... HAVING count(*) > 1  -> req-a|5, req-b|4, req-6|
 
 ### SR-07 (Medium): session IDs are stored in clear text
 
-- Cause: `foundation.sessions.id` holds the cookie value (`server.ts` line 338). `app_runtime` can read the table. A SQL bug, a backup leak, or a read replica gives live sessions.
+- Cause: `foundation.sessions.id` holds the cookie value (`server.ts` line 343). `app_runtime` can read the table. A SQL bug, a backup leak, or a read replica gives live sessions.
 - Evidence:
 
 ```text
@@ -323,7 +326,7 @@ curl -H "cookie: sid=<that value>" localhost:3000/api/session
 
 ### SR-08 (Medium): default secrets apply when `NODE_ENV` is not `production`
 
-- Cause: `server.ts` lines 113-125 fail only when `NODE_ENV === 'production'`. A staging host with `NODE_ENV=staging` or no `NODE_ENV` uses the public default `SESSION_SECRET` and `WEBHOOK_SECRET` from the source code. An attacker can then sign webhooks (`refund.succeeded`, `refund.failed`) and forge CSRF tokens.
+- Cause: `server.ts` lines 118-130 fail only when `NODE_ENV === 'production'`. A staging host with `NODE_ENV=staging` or no `NODE_ENV` uses the public default `SESSION_SECRET` and `WEBHOOK_SECRET` from the source code. An attacker can then sign webhooks (`refund.succeeded`, `refund.failed`) and forge CSRF tokens.
 - Proposed patch:
 
 ```diff
@@ -341,7 +344,7 @@ curl -H "cookie: sid=<that value>" localhost:3000/api/session
 
 ### SR-09 (Medium): one rate-limit bucket per proxy IP, and no route limits
 
-- Cause: `rateLimit({ max: 200, timeWindow: '1 minute' })` (`server.ts` line 105) uses `request.ip`. Fastify has no `trustProxy`, so behind the web proxy all users share one bucket. No route has a lower limit. This includes `/auth/login`, `/auth/callback`, `POST /api/charges/:id/reveal-email`, exports, and the webhook.
+- Cause: `rateLimit({ max: 200, timeWindow: '1 minute' })` (`server.ts` line 110) uses `request.ip`. Fastify has no `trustProxy`, so behind the web proxy all users share one bucket. No route has a lower limit. This includes `/auth/login`, `/auth/callback`, `POST /api/charges/:id/reveal-email`, exports, and the webhook.
 - Evidence (through `localhost:5173`):
 
 ```text
@@ -370,7 +373,7 @@ Finance  GET /api/session  x-ratelimit-remaining: 175
 
 ### SR-10 (Medium): search confirms a customer email for roles without `customer.reveal`
 
-- Cause: `GET /api/charges` matches `q` against `customer_email` for every role with `charge.search` (`tools/refunds/src/api.ts` line 90). The response masks the email, but a match confirms it.
+- Cause: `GET /api/charges` matches `q` against `customer_email` for every role with `charge.search` (`tools/refunds/src/api.ts` line 113). The response masks the email, but a match confirms it.
 - Evidence (Agent session; Agent has no `customer.reveal`):
 
 ```text
@@ -446,7 +449,7 @@ GET /api/charges?q=nobody-zz@example.test -> 200 {"items":[],"nextCursor":null}
 
 ### SR-14 (Low): validation runs before authorization
 
-- Cause: `runRegisteredRoute` parses params, query, and body (`runtime.ts` lines 303-318) before `authorize` (line 320). A user without the permission gets field-level schema details, and the attempt is not audited as `permission.denied`.
+- Cause: `runRegisteredRoute` parses params, query, and body (`runtime.ts` lines 303-315) before `authorize` (line 317). A user without the permission gets field-level schema details, and the attempt is not audited as `permission.denied`.
 - Evidence (Auditor, no `refund.request`):
 
 ```text
@@ -557,6 +560,8 @@ POST /api/approvals/00000000-0000-4000-8000-000000000000/approve {}  -> 409 "Thi
 
 ### SR-20 (Low): the audit CSV export writes `[object Object]`
 
+- Status: fixed on the base in `a2ee631`. `csvCell` now writes objects as JSON. The evidence below applies to `a342626`.
+
 - Evidence (Auditor): `GET /api/audit?format=csv` returns `"27","[object Object]","3027..."`. The export does not contain the event data, so the export cannot support an investigation.
 
 ```diff
@@ -593,7 +598,7 @@ POST /api/approvals/00000000-0000-4000-8000-000000000000/approve {}  -> 409 "Thi
 
 ### SR-24 (Low): refund detail returns all columns
 
-- `GET /api/refunds/:id` uses `SELECT r.*` and returns the full audit timeline to every `refund.read` role, which includes Agents for refunds of other Agents. A new column (for example a provider payload) would leak with no review. List the columns.
+- `GET /api/refunds/:id` uses `SELECT r.*` and returns the full audit timeline. The base now limits Agents to their own refunds (`refund.read_all`). Test: "hides refunds of other requesters from an Agent". A new column (for example a provider payload) would leak with no review. List the columns.
 
 ### SR-25 (Low): unauthenticated `/api/registry` and `/metrics`
 
@@ -601,7 +606,7 @@ POST /api/approvals/00000000-0000-4000-8000-000000000000/approve {}  -> 409 "Thi
 
 ### SR-26 (Low): user ID from `preferred_username`, and roles stay for 8 hours
 
-- `userId = claims.preferred_username ?? claims.sub` (`server.ts` line 334). If a username changes or is reused, approvals and self-approval checks follow the new owner. Use `sub` as the ID and keep the username for display.
+- `userId = claims.preferred_username ?? claims.sub` (`server.ts` line 339). If a username changes or is reused, approvals and self-approval checks follow the new owner. Use `sub` as the ID and keep the username for display.
 - Roles are copied into the session at sign-in. A removed role stays active for up to 8 hours. Logout does not end the Keycloak session.
 
 ### SR-27 (Low): the payment simulator refund list has no authentication
