@@ -552,7 +552,12 @@ function registerApprovalRoutes(app: FastifyInstance, state: RuntimeState) {
       permission,
     );
     if (!authorized) return;
-    const effectiveDecision = body.data.decision ?? decision;
+    if (body.data.decision && body.data.decision !== decision) {
+      return reply
+        .code(400)
+        .send({ error: 'The decision does not match the request.' });
+    }
+    const effectiveDecision = decision;
     const requestedStep = body.data.stepIndex;
     const stepIndex =
       requestedStep ?? nextApprovalStep(row.steps, authorized.roles);
@@ -564,12 +569,17 @@ function registerApprovalRoutes(app: FastifyInstance, state: RuntimeState) {
     try {
       const result = await transaction(state.pool, async (client) => {
         const locked = await client.query(
-          'SELECT * FROM foundation.approval_requests WHERE id=$1 FOR UPDATE',
+          `SELECT *,expires_at <= now() AS expired
+           FROM foundation.approval_requests WHERE id=$1 FOR UPDATE`,
           [approvalId],
         );
-        const approval = locked.rows[0] as ApprovalRequestRecord | undefined;
+        const approval = locked.rows[0] as
+          (ApprovalRequestRecord & { expired: boolean }) | undefined;
         if (!approval || approval.status !== 'pending') {
           throw statusError('This approval is no longer open.', 409);
+        }
+        if (approval.expired) {
+          throw statusError('This approval has expired.', 409);
         }
         if (approval.requester_id === authorized.id) {
           await appendAudit(client, {
