@@ -14,14 +14,14 @@
     "@internal-tools/ui-kit": "*",
     "@tanstack/react-query": "^5.66.9",
     "lucide-react": "^0.468.0",
-    "react": "^18.3.1",
+    "react": "^19.3.0",
     "react-router-dom": "^7.18.4",
     "zod": "^3.24.2"
   },
   "devDependencies": {
     "@internal-tools/testing": "*",
     "@types/pg": "^8.11.11",
-    "@types/react": "^18.3.18",
+    "@types/react": "^19.3.0",
     "fastify": "^5.2.1",
     "pg": "^8.13.3"
   }
