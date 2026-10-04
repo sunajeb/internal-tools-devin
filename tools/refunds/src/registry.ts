@@ -18,6 +18,7 @@ export const refundsTool = defineTool({
     'refund.request': ['agent', 'supervisor'],
     'refund.approve': ['supervisor', 'finance'],
     'refund.read': ['agent', 'supervisor', 'finance', 'auditor'],
+    'refund.read_all': ['supervisor', 'finance', 'auditor'],
     'dashboard.read': [
       'agent',
       'supervisor',
@@ -32,7 +33,7 @@ export const refundsTool = defineTool({
   },
   approvalRules: {
     'refund.execute': definePolicy({
-      version: 1,
+      version: 3,
       tiers: [
         {
           name: 'auto',

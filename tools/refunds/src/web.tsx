@@ -321,7 +321,7 @@ function Overview({ user }: { user: User }) {
               <b>Approval policy active</b>
               <p>Thresholds are versioned and dual-controlled.</p>
               <span className="policy-version">
-                <span /> POLICY V1 · ACTIVE
+                <span /> POLICY V3 · ACTIVE
               </span>
             </div>
           </div>
@@ -756,10 +756,11 @@ function RefundDialog({
   const [error, setError] = useState('');
   const [idempotencyKey] = useState(() => crypto.randomUUID());
   const amountMinor = BigInt(amount || '0');
+  const cumulativeMinor = BigInt(charge.refunded_minor) + amountMinor;
   const tier =
-    amountMinor <= 25_000n
+    cumulativeMinor <= 25_000n
       ? 'Instant refund'
-      : amountMinor <= 500_000n
+      : cumulativeMinor <= 500_000n
         ? 'Supervisor approval'
         : 'Supervisor + Finance approval';
   const mutation = useMutation({
@@ -881,7 +882,7 @@ function RefundDialog({
                 : 'This request will appear in the eligible approver inbox.'}
             </small>
           </div>
-          <span className="tier-policy">POLICY V1</span>
+          <span className="tier-policy">POLICY V3</span>
         </div>
         {error && (
           <div className="form-error">
@@ -911,8 +912,11 @@ function Refunds({ user }: { user: User }) {
   const [filter, setFilter] = useState('all');
   const [searchParams, setSearchParams] = useSearchParams();
   const { data } = useQuery({
-    queryKey: ['refunds'],
-    queryFn: () => api<{ items: Refund[] }>('/api/refunds'),
+    queryKey: ['refunds', filter],
+    queryFn: () =>
+      api<{ items: Refund[] }>(
+        filter === 'all' ? '/api/refunds' : `/api/refunds?status=${filter}`,
+      ),
     refetchInterval: 2_000,
   });
   const items = useMemo(
@@ -1145,10 +1149,13 @@ function Approvals({ user }: { user: User }) {
       stepIndex: number;
       decision: string;
     }) =>
-      api(`/api/approvals/${id}/approve`, {
-        method: 'POST',
-        body: JSON.stringify({ stepIndex, decision }),
-      }),
+      api(
+        `/api/approvals/${id}/${decision === 'reject' ? 'reject' : 'approve'}`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ stepIndex, decision }),
+        },
+      ),
     onSuccess: () => {
       setMessage('Approval recorded. The request has been updated.');
       client.invalidateQueries();

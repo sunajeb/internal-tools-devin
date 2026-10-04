@@ -156,6 +156,37 @@ async function recordException(
   );
 }
 
+async function resolveMatchedExceptions(pool: pg.Pool, key: string) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const resolved = await client.query(
+      `UPDATE refunds.reconciliation_exceptions
+       SET status='resolved',resolution_code='auto_matched',
+           resolution_note='Provider and internal records now match.',
+           resolved_by='service-worker',resolved_at=now()
+       WHERE reconciler='refunds-provider' AND reconciliation_key=$1 AND status='open'
+       RETURNING id,exception_type`,
+      [key],
+    );
+    for (const exception of resolved.rows) {
+      await appendWorkerAudit(client, {
+        action: 'reconciliation.exception_auto_resolved',
+        objectType: 'reconciliation_exception',
+        objectId: exception.id,
+        before: { status: 'open', exceptionType: exception.exception_type },
+        after: { status: 'resolved', resolutionCode: 'auto_matched' },
+      });
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function runReconciliation(pool: pg.Pool, provider: PaymentProvider) {
   const externalRefunds = await provider.listRefunds();
   const providerIds = new Set(externalRefunds.map((refund) => refund.id));
@@ -216,6 +247,7 @@ async function runReconciliation(pool: pg.Pool, provider: PaymentProvider) {
       });
       continue;
     }
+    await resolveMatchedExceptions(pool, external.id);
     if (row.status === 'executing' && external.status === 'pending') {
       await updateRefundStatus(pool, row.id, 'executing', external.id);
       await pool.query(
@@ -262,7 +294,20 @@ async function runReconciliation(pool: pg.Pool, provider: PaymentProvider) {
       : externalRefunds.some(
           (external) => external.idempotencyKey === refund.id,
         );
-    if (!providerRecordExists) {
+    if (providerRecordExists) {
+      await resolveMatchedExceptions(pool, refund.id);
+    } else if (
+      refund.status === 'executing' &&
+      refund.outbox_status === 'failed'
+    ) {
+      await updateRefundStatus(
+        pool,
+        refund.id,
+        'failed',
+        undefined,
+        'provider_unreachable',
+      );
+    } else {
       await recordException(pool, 'missing_external', refund.id, {
         refundId: refund.id,
         providerRefundId: refund.provider_refund_id,
@@ -333,7 +378,7 @@ async function executeRefund(
 async function processWebhooks(pool: pg.Pool) {
   const result = await pool.query(
     `SELECT provider,event_id,event_type,payload FROM foundation.inbound_events
-     WHERE processed_at IS NULL ORDER BY received_at LIMIT 50`,
+     WHERE processed_at IS NULL AND error IS NULL ORDER BY received_at LIMIT 50`,
   );
   for (const event of result.rows) {
     const payload = event.payload as {
@@ -345,25 +390,42 @@ async function processWebhooks(pool: pg.Pool) {
       : event.event_type.endsWith('.failed')
         ? 'failed'
         : null;
-    if (refundId && to) {
-      const found = await pool.query(
-        `SELECT id,status FROM refunds.refunds
-         WHERE id::text=$1 OR provider_refund_id=$1 LIMIT 1`,
-        [refundId],
-      );
-      if (['executing', 'approved'].includes(found.rows[0]?.status)) {
-        await updateRefundStatus(
-          pool,
-          found.rows[0].id,
-          to,
-          payload.data?.providerRefundId,
+    try {
+      if (refundId && to) {
+        const found = await pool.query(
+          `SELECT id,status FROM refunds.refunds
+           WHERE id::text=$1 OR provider_refund_id=$1 LIMIT 1`,
+          [refundId],
         );
+        // Only an executing refund has a provider call in flight. Other
+        // states ignore the event; reconciliation reports any difference.
+        if (found.rows[0]?.status === 'executing') {
+          await updateRefundStatus(
+            pool,
+            found.rows[0].id,
+            to,
+            payload.data?.providerRefundId,
+            to === 'failed' ? 'provider_declined' : undefined,
+          );
+        }
       }
+      await pool.query(
+        `UPDATE foundation.inbound_events SET processed_at=now() WHERE provider=$1 AND event_id=$2`,
+        [event.provider, event.event_id],
+      );
+    } catch (error) {
+      await pool.query(
+        `UPDATE foundation.inbound_events SET error=$3 WHERE provider=$1 AND event_id=$2`,
+        [
+          event.provider,
+          event.event_id,
+          (error instanceof Error ? error.message : String(error)).slice(
+            0,
+            500,
+          ),
+        ],
+      );
     }
-    await pool.query(
-      `UPDATE foundation.inbound_events SET processed_at=now() WHERE provider=$1 AND event_id=$2`,
-      [event.provider, event.event_id],
-    );
   }
 }
 

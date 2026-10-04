@@ -80,8 +80,20 @@ async function sendWebhook(refund: SimRefund, eventType: string) {
       },
       body: payload,
     });
-  await send();
-  if (faults.has('duplicate-webhook')) await send();
+  try {
+    await send();
+    if (faults.has('duplicate-webhook')) await send();
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        level: 'warn',
+        message: 'Webhook delivery failed; reconciliation will catch up',
+        eventType,
+        providerRefundId: refund.id,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+  }
 }
 
 app.get('/health', async () => ({ status: 'ok' }));

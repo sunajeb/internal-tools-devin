@@ -1,4 +1,6 @@
-FROM node:22.23.3-bookworm-slim
+FROM node:22.23.3-trixie-slim
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/* \
+  && npm install -g npm@11.20.0
 ENV NODE_ENV=development
 WORKDIR /workspace
 COPY package.json package-lock.json* ./

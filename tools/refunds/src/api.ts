@@ -5,11 +5,13 @@ import {
   type FoundationRoute,
   type ToolRegistration,
 } from '@internal-tools/foundation';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { refundsTool } from './registry.js';
 import {
   dailyAutoRefundLimitMinor,
   refundableMinor,
+  refundPolicy,
   refundPolicyVersion,
   refundTier,
 } from './domain.js';
@@ -59,6 +61,29 @@ const ExceptionInput = z.object({
 const IdParams = z.object({ id: z.string().min(1).max(128) });
 function fail(message: string, statusCode = 400): never {
   throw Object.assign(new Error(message), { statusCode });
+}
+
+const RefundListQuery = z.object({
+  format: z.enum(['csv']).optional(),
+  status: z
+    .enum([
+      'pending_approval',
+      'approved',
+      'executing',
+      'succeeded',
+      'reconciled',
+      'failed',
+      'rejected',
+      'cancelled',
+      'expired',
+    ])
+    .optional(),
+});
+
+function mayReadAllRefunds(user: FoundationContext['user']) {
+  return refundsTool.permissions['refund.read_all']?.some((role) =>
+    user.roles.includes(role),
+  );
 }
 
 function mayExport(user: FoundationContext['user']) {
@@ -121,23 +146,22 @@ const routes = [
       values.push(limit + 1);
       const result = await tx.query(
         `SELECT id,customer_id,customer_email,card_brand,card_last4,amount_minor::text,
-                currency,refunded_minor::text,created_at
+                currency,refunded_minor::text,created_at,
+                to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_at
          FROM refunds.charges ${filters.length ? `WHERE ${filters.join(' AND ')}` : ''}
          ORDER BY created_at DESC,id DESC LIMIT $${values.length}`,
         values,
       );
       const hasMore = result.rows.length > limit;
-      const charges = result.rows.slice(0, limit).map((row) => ({
+      const rows = result.rows.slice(0, limit);
+      const charges = rows.map(({ cursor_at: _cursorAt, ...row }) => ({
         ...row,
         customer_email: mask(row.customer_email, 'restricted'),
       }));
-      const last = charges.at(-1);
+      const last = rows.at(-1);
       return {
         items: charges,
-        nextCursor:
-          hasMore && last
-            ? `${new Date(last.created_at).toISOString()}~${last.id}`
-            : null,
+        nextCursor: hasMore && last ? `${last.cursor_at}~${last.id}` : null,
       };
     },
   }),
@@ -222,7 +246,7 @@ const routes = [
       if (charge.currency !== 'USD') {
         fail('Refund currency must match the payment currency.', 400);
       }
-      const tier = refundTier(amount);
+      const tier = refundTier(BigInt(charge.refunded_minor) + amount);
       if (tier.name === 'dual' && !user.roles.includes('supervisor')) {
         fail('Only a Supervisor can request a refund above $5,000.', 403);
       }
@@ -248,7 +272,7 @@ const routes = [
       const inserted = await tx.query(
         `INSERT INTO refunds.refunds(
            charge_id,amount_minor,currency,reason_code,note,requester_id,status,tier,policy_version
-         ) VALUES($1,$2::bigint,$3,$4,$5,$6,$7,$8,1)
+         ) VALUES($1,$2::bigint,$3,$4,$5,$6,$7,$8,$9)
          RETURNING id::text,charge_id,amount_minor::text,currency,reason_code,note,
                    requester_id,status,tier,created_at`,
         [
@@ -260,6 +284,7 @@ const routes = [
           user.id,
           status,
           tier.name,
+          refundPolicyVersion,
         ],
       );
       const refund = inserted.rows[0];
@@ -273,6 +298,9 @@ const routes = [
           policyVersion: refundPolicyVersion,
           contentHash: requestHash(input),
           steps,
+          expiresAt: new Date(
+            Date.now() + refundPolicy.expiresAfterHours * 60 * 60_000,
+          ),
           summary: {
             refund_id: refund.id,
             charge_id: refund.charge_id,
@@ -310,9 +338,9 @@ const routes = [
     method: 'GET',
     path: '/api/refunds',
     permission: 'refund.read',
-    query: z.object({ format: z.enum(['csv']).optional() }),
+    query: RefundListQuery,
     handler: async ({ tx, query, user, audit }) => {
-      const { format } = query as { format?: 'csv' };
+      const { format, status } = query as z.infer<typeof RefundListQuery>;
       if (format === 'csv') {
         if (!mayExport(user)) {
           return {
@@ -361,7 +389,10 @@ const routes = [
                 r.requester_id,r.created_at,a.id AS approval_id
          FROM refunds.refunds r
          LEFT JOIN foundation.approval_requests a ON a.id=r.approval_request_id
+         WHERE ($1::boolean OR r.requester_id=$2)
+           AND ($3::text IS NULL OR r.status=$3)
          ORDER BY r.created_at DESC LIMIT 100`,
+        [mayReadAllRefunds(user), user.id, status ?? null],
       );
       return { items: result.rows };
     },
@@ -371,11 +402,12 @@ const routes = [
     path: '/api/refunds/:id',
     permission: 'refund.read',
     params: IdParams,
-    handler: async ({ tx, params }) => {
+    handler: async ({ tx, params, user }) => {
       const { id } = params as z.infer<typeof IdParams>;
       const result = await tx.query(
-        'SELECT r.*,r.amount_minor::text FROM refunds.refunds r WHERE r.id=$1',
-        [id],
+        `SELECT r.*,r.amount_minor::text FROM refunds.refunds r
+         WHERE r.id=$1 AND ($2::boolean OR r.requester_id=$3)`,
+        [id, mayReadAllRefunds(user), user.id],
       );
       if (!result.rows[0])
         return { statusCode: 404, body: { error: 'Refund not found.' } };
@@ -394,8 +426,8 @@ const routes = [
     method: 'POST',
     path: '/api/reconciliation/run',
     permission: 'exception.resolve',
-    handler: async ({ user, outbox, audit, requestId }) => {
-      const idempotencyKey = `reconciliation:${requestId}`;
+    handler: async ({ user, outbox, audit }) => {
+      const idempotencyKey = `reconciliation:${randomUUID()}`;
       await outbox.enqueue(
         'reconciliation.run',
         { requestedBy: user.id },
