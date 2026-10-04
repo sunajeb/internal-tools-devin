@@ -2041,3 +2041,61 @@ tbody tr:last-child td {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 9px;
 }
+.sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.sort-btn:hover,
+th[aria-sort='ascending'] .sort-btn,
+th[aria-sort='descending'] .sort-btn {
+  color: #1f55b5;
+}
+.reveal-form {
+  display: grid;
+  gap: 6px;
+  margin: 4px 0 10px;
+  padding: 10px;
+  border: 1px solid #e3e8ef;
+  border-radius: 8px;
+  background: #fafbfc;
+}
+.reveal-form label {
+  color: #2b3644;
+  font-size: 9px;
+  font-weight: 600;
+}
+.reveal-form textarea {
+  min-height: 52px;
+  padding: 7px 9px;
+  border: 1px solid #d5dce5;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 10px;
+  resize: vertical;
+}
+.reveal-form textarea:focus-visible {
+  border-color: #2563eb;
+  outline: 1px solid #2563eb;
+  outline-offset: 0;
+}
+.reveal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

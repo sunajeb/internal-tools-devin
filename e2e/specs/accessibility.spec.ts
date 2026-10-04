@@ -75,6 +75,8 @@ async function expectNoSeriousViolations(
   expect(blocking, `${name}: serious or critical axe violations`).toEqual([]);
 }
 
+test.use({ reducedMotion: 'reduce' });
+
 test.describe('accessibility', () => {
   test('sign-in page', async ({ page }, testInfo) => {
     await page.goto('/');
@@ -89,6 +91,9 @@ test.describe('accessibility', () => {
   }, testInfo) => {
     await signIn(page, accounts.agent);
     await page.waitForLoadState('networkidle');
+    await expect(
+      page.getByRole('link', { name: 'Open approval inbox' }),
+    ).toHaveCount(0);
     await expectNoSeriousViolations(page, testInfo, 'agent-overview');
 
     await openPage(page, 'Payments', /payments/i);
@@ -98,9 +103,27 @@ test.describe('accessibility', () => {
     await expect(firstPayment).toBeVisible();
     await expectNoSeriousViolations(page, testInfo, 'agent-payments');
 
+    const amountHeader = page.getByRole('columnheader', { name: /^amount/i });
+    const dateHeader = page.getByRole('columnheader', { name: /^date/i });
+    await expect(amountHeader).toHaveAttribute('aria-sort', 'none');
+    await expect(dateHeader).toHaveAttribute('aria-sort', 'descending');
+    await amountHeader.getByRole('button').click();
+    await expect(amountHeader).toHaveAttribute('aria-sort', 'descending');
+    await expect(dateHeader).toHaveAttribute('aria-sort', 'none');
+    await amountHeader.getByRole('button').click();
+    await expect(amountHeader).toHaveAttribute('aria-sort', 'ascending');
+    await dateHeader.getByRole('button').click();
+    await expect(dateHeader).toHaveAttribute('aria-sort', 'descending');
+    await expect(firstPayment).toBeVisible();
+
     await page.getByRole('button', { name: /filters/i }).click();
     await expect(page.getByLabel(/minimum amount/i)).toBeVisible();
     await expectNoSeriousViolations(page, testInfo, 'agent-payments-filters');
+
+    await firstPayment.click();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(firstPayment).toBeFocused();
 
     await firstPayment.click();
     const detail = page.getByRole('dialog');
@@ -116,7 +139,14 @@ test.describe('accessibility', () => {
       .getByRole('button', { name: /request refund/i })
       .click();
     const refundDialog = page.getByRole('dialog', { name: 'Refund payment' });
-    await expect(refundDialog.getByLabel(/refund amount/i)).toBeFocused();
+    const amount = refundDialog.getByLabel(/refund amount/i);
+    await expect(amount).toBeFocused();
+    await amount.clear();
+    await amount.pressSequentially('250');
+    await expect(amount).toHaveValue('250');
+    await amount.clear();
+    await amount.pressSequentially('12.5');
+    await expect(amount).toHaveValue('12.5');
     await refundDialog.getByRole('button', { name: /submit request/i }).click();
     await expect(refundDialog.getByLabel(/internal note/i)).toBeFocused();
     await expect(
@@ -136,10 +166,37 @@ test.describe('accessibility', () => {
     await expectNoSeriousViolations(page, testInfo, 'agent-access-restricted');
   });
 
-  test('supervisor: approval inbox', async ({ page }, testInfo) => {
+  test('supervisor: approval inbox and reveal with a reason', async ({
+    page,
+  }, testInfo) => {
     await signIn(page, accounts.supervisor);
     await openPage(page, 'Approvals', /approval inbox/i);
+    await expect(
+      page.getByRole('heading', { name: /refund request/i }).first(),
+    ).toBeVisible();
+    await expect(page.getByText(/NaN/)).toHaveCount(0);
     await expectNoSeriousViolations(page, testInfo, 'supervisor-approvals');
+
+    await openPage(page, 'Payments', /payments/i);
+    await page
+      .getByRole('button', { name: /open payment/i })
+      .first()
+      .click();
+    const detail = page.getByRole('dialog');
+    await detail.getByRole('button', { name: 'Reveal email' }).click();
+    const form = detail.getByRole('form', { name: 'Reveal email' });
+    const reason = form.getByLabel('Reason for reveal');
+    await expect(reason).toBeFocused();
+    await form.getByRole('button', { name: 'Reveal email' }).click();
+    await expect(form.getByText(/10 or more characters/i)).toBeVisible();
+    await expect(reason).toBeFocused();
+    await expectNoSeriousViolations(page, testInfo, 'supervisor-reveal-reason');
+    await reason.fill('Customer asked for a receipt by email.');
+    await form.getByRole('button', { name: 'Reveal email' }).click();
+    await expect(
+      detail.getByRole('button', { name: 'Email revealed' }),
+    ).toBeVisible();
+    await expect(form).toHaveCount(0);
   });
 
   test('finance: reconciliation', async ({ page }, testInfo) => {

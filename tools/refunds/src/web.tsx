@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   Link,
@@ -27,6 +27,9 @@ import {
   WalletCards,
   X,
   XCircle,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
 } from 'lucide-react';
 import {
   api,
@@ -66,8 +69,16 @@ type Refund = {
   note?: string;
   approval_id?: string;
   approvalSteps?: string[][];
-  timeline?: Array<{ action: string; occurredAt: string; actorId: string }>;
+  timeline?: TimelineEvent[];
 };
+type TimelineEvent = {
+  action: string;
+  occurredAt: string;
+  actorId: string;
+  actorRoles?: string[];
+  after?: { stepIndex?: number } | null;
+};
+type ChargeSort = 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc';
 type Approval = Refund & {
   approval_id: string;
   requester_id: string;
@@ -339,14 +350,16 @@ function Overview({ user }: { user: User }) {
               <h2>Approval queue</h2>
               <p>Across your permitted roles</p>
             </div>
-            <Link
-              className="round-link"
-              to="/approvals"
-              aria-label="Open approval inbox"
-              title="Open approval inbox"
-            >
-              <ArrowUpRight size={15} aria-hidden />
-            </Link>
+            {canOpenPage(user, '/approvals') && (
+              <Link
+                className="round-link"
+                to="/approvals"
+                aria-label="Open approval inbox"
+                title="Open approval inbox"
+              >
+                <ArrowUpRight size={15} aria-hidden />
+              </Link>
+            )}
           </div>
           {user.roles.some((role) =>
             ['supervisor', 'finance'].includes(role),
@@ -407,6 +420,7 @@ function Payments({ user }: { user: User }) {
   const [minAmount, setMinAmount] = useState('');
   const [maxAmount, setMaxAmount] = useState('');
   const [cursor, setCursor] = useState<string>();
+  const [sort, setSort] = useState<ChargeSort>('date_desc');
   const [selected, setSelected] = useState<Charge | null>(null);
   const [requestCharge, setRequestCharge] = useState<Charge | null>(null);
   const filterPanelId = useId();
@@ -417,7 +431,7 @@ function Payments({ user }: { user: User }) {
   const amountRangeInvalid =
     Boolean(minMinor && maxMinor) && BigInt(minMinor) > BigInt(maxMinor);
   const { data, isFetching, isLoading, error, refetch } = useQuery({
-    queryKey: ['charges', query, from, to, minMinor, maxMinor, cursor],
+    queryKey: ['charges', query, from, to, minMinor, maxMinor, sort, cursor],
     queryFn: () => {
       const params = new URLSearchParams();
       if (query) params.set('q', query);
@@ -425,6 +439,7 @@ function Payments({ user }: { user: User }) {
       if (to) params.set('to', to);
       if (minMinor) params.set('minMinor', minMinor);
       if (maxMinor) params.set('maxMinor', maxMinor);
+      params.set('sort', sort);
       if (cursor) params.set('cursor', cursor);
       return api<{ items: Charge[]; nextCursor: string | null }>(
         `/api/charges?${params}`,
@@ -558,6 +573,11 @@ function Payments({ user }: { user: User }) {
           </div>
         )}
         <ChargeTable
+          sort={sort}
+          onSort={(next) => {
+            setSort(next);
+            setCursor(undefined);
+          }}
           charges={data?.items ?? []}
           onSelect={setSelected}
           loading={isLoading}
@@ -646,14 +666,50 @@ function TableStatusRow({
   );
 }
 
+function SortHeader({
+  label,
+  column,
+  sort,
+  onSort,
+}: {
+  label: string;
+  column: 'date' | 'amount';
+  sort: ChargeSort;
+  onSort: (sort: ChargeSort) => void;
+}) {
+  const active = sort.startsWith(column);
+  const ascending = sort.endsWith('asc');
+  const next = (
+    active && !ascending ? `${column}_asc` : `${column}_desc`
+  ) as ChargeSort;
+  return (
+    <th aria-sort={active ? (ascending ? 'ascending' : 'descending') : 'none'}>
+      <button type="button" className="sort-btn" onClick={() => onSort(next)}>
+        {label}
+        {!active ? (
+          <ArrowUpDown size={11} aria-hidden />
+        ) : ascending ? (
+          <ArrowUp size={11} aria-hidden />
+        ) : (
+          <ArrowDown size={11} aria-hidden />
+        )}
+      </button>
+    </th>
+  );
+}
+
 function ChargeTable({
   charges,
+  sort,
+  onSort,
   onSelect,
   loading,
   error,
   onRetry,
 }: {
   charges: Charge[];
+  sort: ChargeSort;
+  onSort: (sort: ChargeSort) => void;
   onSelect: (charge: Charge) => void;
   loading?: boolean;
   error?: unknown;
@@ -666,10 +722,20 @@ function ChargeTable({
           <tr>
             <th>PAYMENT</th>
             <th>CUSTOMER</th>
-            <th>AMOUNT</th>
+            <SortHeader
+              label="AMOUNT"
+              column="amount"
+              sort={sort}
+              onSort={onSort}
+            />
             <th>REFUNDED</th>
             <th>STATUS</th>
-            <th>DATE</th>
+            <SortHeader
+              label="DATE"
+              column="date"
+              sort={sort}
+              onSort={onSort}
+            />
           </tr>
         </thead>
         <tbody>
@@ -748,7 +814,22 @@ function ChargeDialog({
   onRequest: (charge: Charge) => void;
 }) {
   const [revealedEmail, setRevealedEmail] = useState<string>();
+  const [revealOpen, setRevealOpen] = useState(false);
+  const [revealReason, setRevealReason] = useState('');
+  const [revealAttempted, setRevealAttempted] = useState(false);
+  const revealButtonRef = useRef<HTMLButtonElement>(null);
+  const reasonRef = useRef<HTMLTextAreaElement>(null);
   const titleId = useId();
+  const revealFormId = useId();
+  const reasonId = useId();
+  const reasonError =
+    revealReason.trim().length < 10
+      ? `Enter a reason of 10 or more characters. The reason has ${revealReason.trim().length}.`
+      : '';
+  const showReasonError = Boolean(reasonError && revealAttempted);
+  useEffect(() => {
+    if (revealOpen) reasonRef.current?.focus();
+  }, [revealOpen]);
   const {
     data: charge,
     isLoading,
@@ -759,13 +840,23 @@ function ChargeDialog({
     queryFn: () => api<Charge>(`/api/charges/${chargeId}`),
   });
   const reveal = useMutation({
-    mutationFn: () =>
+    mutationFn: (reason: string) =>
       api<{ customerEmail: string }>(`/api/charges/${chargeId}/reveal-email`, {
         method: 'POST',
-        body: '{}',
+        body: JSON.stringify({ reason }),
       }),
-    onSuccess: (result) => setRevealedEmail(result.customerEmail),
+    onSuccess: (result) => {
+      setRevealedEmail(result.customerEmail);
+      setRevealOpen(false);
+    },
   });
+  const closeReveal = () => {
+    setRevealOpen(false);
+    setRevealReason('');
+    setRevealAttempted(false);
+    reveal.reset();
+    revealButtonRef.current?.focus();
+  };
   if (isLoading || !charge)
     return (
       <Dialog onClose={onClose} label="Payment detail">
@@ -817,24 +908,77 @@ function ChargeDialog({
             ['supervisor', 'finance', 'auditor'].includes(role),
           ) && (
             <button
+              ref={revealButtonRef}
               type="button"
               className="reveal-btn"
               aria-label={revealedEmail ? 'Email revealed' : 'Reveal email'}
-              onClick={() => reveal.mutate()}
-              disabled={reveal.isPending || Boolean(revealedEmail)}
+              aria-expanded={revealedEmail ? undefined : revealOpen}
+              aria-controls={revealOpen ? revealFormId : undefined}
+              onClick={() => setRevealOpen(true)}
+              disabled={revealOpen || Boolean(revealedEmail)}
             >
-              {revealedEmail
-                ? 'Revealed'
-                : reveal.isPending
-                  ? 'Revealing…'
-                  : 'Reveal'}
+              {revealedEmail ? 'Revealed' : 'Reveal'}
             </button>
           )}
         </div>
-        {reveal.error && (
-          <p className="field-error" role="alert">
-            The email was not revealed. {reveal.error.message}
-          </p>
+        {revealOpen && !revealedEmail && (
+          <form
+            id={revealFormId}
+            className="reveal-form"
+            aria-label="Reveal email"
+            noValidate
+            onSubmit={(event) => {
+              event.preventDefault();
+              setRevealAttempted(true);
+              if (reasonError) {
+                reasonRef.current?.focus();
+                return;
+              }
+              reveal.mutate(revealReason.trim());
+            }}
+          >
+            <label htmlFor={reasonId}>Reason for reveal</label>
+            <textarea
+              id={reasonId}
+              ref={reasonRef}
+              value={revealReason}
+              maxLength={500}
+              required
+              aria-invalid={showReasonError}
+              aria-describedby={`${reasonId}-hint${showReasonError ? ` ${reasonId}-error` : ''}`}
+              placeholder="For example: customer asked for a receipt by email"
+              onChange={(event) => setRevealReason(event.target.value)}
+            />
+            <p id={`${reasonId}-hint`} className="field-hint">
+              The audit log keeps this reason. Enter 10 to 500 characters.
+            </p>
+            {showReasonError && (
+              <p id={`${reasonId}-error`} className="field-error">
+                {reasonError}
+              </p>
+            )}
+            {reveal.error && (
+              <p className="field-error" role="alert">
+                The email was not revealed. {reveal.error.message}
+              </p>
+            )}
+            <div className="reveal-actions">
+              <button
+                type="button"
+                className="secondary-btn small-btn"
+                onClick={closeReveal}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="primary-btn small-btn"
+                disabled={reveal.isPending}
+              >
+                {reveal.isPending ? 'Revealing…' : 'Reveal email'}
+              </button>
+            </div>
+          </form>
         )}
         <Detail
           label="Card"
@@ -1283,6 +1427,26 @@ function RefundTable({
   );
 }
 
+function timelineLabel(event: TimelineEvent) {
+  if (
+    event.action === 'approval.approved' ||
+    event.action === 'approval.rejected'
+  ) {
+    const step =
+      typeof event.after?.stepIndex === 'number'
+        ? ` step ${event.after.stepIndex + 1}`
+        : '';
+    return `Approval${step} ${event.action === 'approval.approved' ? 'approved' : 'declined'}`;
+  }
+  return event.action.replaceAll(/[._]/g, ' ');
+}
+
+function approvalTitle(item: Approval) {
+  return item.amount_minor
+    ? `${money(item.amount_minor, item.currency || 'USD')} refund request`
+    : 'Refund request';
+}
+
 function RefundTimelineDialog({
   id,
   onClose,
@@ -1340,9 +1504,13 @@ function RefundTimelineDialog({
               <li className="timeline-event" key={`${event.action}-${index}`}>
                 <span className="timeline-dot" aria-hidden="true" />
                 <div>
-                  <b>{event.action.replaceAll(/[._]/g, ' ')}</b>
+                  <b>{timelineLabel(event)}</b>
                   <small>
-                    {event.actorId} · {dateTime(event.occurredAt)}
+                    {event.actorId}
+                    {event.actorRoles?.length
+                      ? ` (${event.actorRoles.join(', ')})`
+                      : ''}{' '}
+                    · {dateTime(event.occurredAt)}
                   </small>
                 </div>
               </li>
@@ -1477,7 +1645,8 @@ function ApprovalCard({
     );
   const selfApproval = item.requester_id === user.id;
   const titleId = useId();
-  const requestName = `${money(item.amount_minor, item.currency)} refund request for ${item.charge_id}`;
+  const title = approvalTitle(item);
+  const requestName = item.charge_id ? `${title} for ${item.charge_id}` : title;
   return (
     <article className="approval-card" aria-labelledby={titleId}>
       <div className="approval-card-main">
@@ -1486,16 +1655,18 @@ function ApprovalCard({
         </div>
         <div className="approval-copy">
           <div className="approval-title">
-            <h3 id={titleId}>
-              {money(item.amount_minor, item.currency)} refund request
-            </h3>
+            <h3 id={titleId}>{title}</h3>
             <StatusBadge status={item.tier} />
           </div>
           <div className="approval-meta">
-            Payment <span className="mono-id">{item.charge_id}</span>
-            <span className="meta-dot" aria-hidden="true">
-              ·
-            </span>{' '}
+            {item.charge_id && (
+              <>
+                Payment <span className="mono-id">{item.charge_id}</span>
+                <span className="meta-dot" aria-hidden="true">
+                  ·
+                </span>{' '}
+              </>
+            )}
             submitted by <b>{item.requester_id}</b>
             <span className="meta-dot" aria-hidden="true">
               ·
@@ -1566,7 +1737,7 @@ function ApprovalsPreview() {
             {item.requester_id.slice(0, 1).toUpperCase()}
           </span>
           <span className="preview-copy">
-            <b>{money(item.amount_minor, item.currency)} refund</b>
+            <b>{approvalTitle(item)}</b>
             <small>
               {item.requester_id} · {item.tier} review
             </small>
