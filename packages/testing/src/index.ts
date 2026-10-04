@@ -14,5 +14,3 @@ export function permissionMatrix(tool: ToolDefinition) {
     })),
   );
 }
-
-export const sessionFor = (id: string, roles: string[]) => ({ id, roles });

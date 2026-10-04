@@ -20,7 +20,8 @@ export function approveStep(
     throw new Error('An approver can only approve once per request');
   }
   const step = steps[stepIndex];
-  if (!step || !step.roles.some((role) => approverRoles.includes(role))) {
+  const approverRole = step?.roles.find((role) => approverRoles.includes(role));
+  if (!step || !approverRole) {
     throw new Error('Approver does not meet the required role for this step');
   }
   if (step.approvals.length)
@@ -32,14 +33,10 @@ export function approveStep(
           approvals: [
             {
               userId: approverId,
-              role: step.roles.find((role) => approverRoles.includes(role))!,
+              role: approverRole,
             },
           ],
         }
       : item,
   );
-}
-
-export function allStepsApproved(steps: ApprovalStep[]): boolean {
-  return steps.every((step) => step.approvals.length > 0);
 }

@@ -1,10 +1,6 @@
 import pg from 'pg';
 import { createServer } from 'node:http';
-import {
-  databaseConfig,
-  retryDelayMs,
-  type ToolRegistration,
-} from '@internal-tools/foundation';
+import { databaseConfig, retryDelayMs } from '@internal-tools/foundation';
 import { buildWorkerRegistry } from './tool-registry.js';
 
 const pool = new pg.Pool({ ...databaseConfig(), max: 8 });

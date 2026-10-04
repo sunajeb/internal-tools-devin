@@ -29,11 +29,11 @@ export interface RouteDefinition<
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
   permission: string;
-  params?: z.ZodType<Params>;
-  query?: z.ZodType<Query>;
-  body?: z.ZodType<Body>;
+  params?: z.ZodType<Params, z.ZodTypeDef, unknown>;
+  query?: z.ZodType<Query, z.ZodTypeDef, unknown>;
+  body?: z.ZodType<Body, z.ZodTypeDef, unknown>;
   idempotent?: boolean;
-  handler: (context: FoundationContext<Params, Query, Body>) => unknown;
+  handler(context: FoundationContext<Params, Query, Body>): unknown;
 }
 
 export function defineRoute<Params = unknown, Query = unknown, Body = unknown>(

@@ -1,4 +1,5 @@
 import { definePolicy, defineTool } from '@internal-tools/foundation';
+import { refundsPermissions } from './permissions.js';
 
 export const refundsTool = defineTool({
   id: 'refunds',
@@ -12,25 +13,7 @@ export const refundsTool = defineTool({
     auditor: { idpGroup: 'auditor' },
     platform_admin: { idpGroup: 'platform-admin' },
   },
-  permissions: {
-    'charge.search': ['agent', 'supervisor', 'finance', 'auditor'],
-    'customer.reveal': ['supervisor', 'finance', 'auditor'],
-    'refund.request': ['agent', 'supervisor'],
-    'refund.approve': ['supervisor', 'finance'],
-    'refund.read': ['agent', 'supervisor', 'finance', 'auditor'],
-    'refund.read_all': ['supervisor', 'finance', 'auditor'],
-    'dashboard.read': [
-      'agent',
-      'supervisor',
-      'finance',
-      'auditor',
-      'platform_admin',
-    ],
-    'exception.resolve': ['finance'],
-    'refund.export': ['finance', 'auditor'],
-    'audit.read': ['auditor', 'platform_admin'],
-    'execution.pause': ['platform_admin'],
-  },
+  permissions: refundsPermissions,
   approvalRules: {
     'refund.execute': definePolicy({
       version: 3,
