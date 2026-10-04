@@ -54,6 +54,28 @@ These accounts and passwords are for local development only. Do not reuse them o
 
 The payment simulator supports duplicate requests, transient errors, provider failures, signed webhooks, and provider-only refunds. Its admin API uses the local-only `SIM_ADMIN_TOKEN` value in `.env.example`. The optional Stripe test adapter requires a Stripe test-mode key and a mapped `provider_charge_id` on each Stripe-backed charge; the synthetic demo charges use the simulator.
 
+## KYC Review Queue
+
+The KYC Review Queue is the second tool on the shared Foundation. It reuses Foundation sign-in, permissions, CSRF, audit, approvals, masking and logs. Its code is in `tools/kyc/`. The seed adds 50,000 synthetic KYC cases.
+
+| Account       | Password              | Role                        |
+| ------------- | --------------------- | --------------------------- |
+| `kyc-analyst` | `LocalKycAnalyst123!` | KYC analyst                 |
+| `kyc-lead`    | `LocalKycLead123!`    | KYC lead                    |
+| `auditor`     | `LocalAuditor123!`    | Auditor (read only, masked) |
+
+Demo steps:
+
+1. Sign in as `kyc-analyst`. Open **KYC queue** or go to `http://localhost:5173/tools/kyc`.
+2. Set **Status** to New and **Risk band** to High. Use **Next page** and **Previous page** to move through the results. The server uses keyset pagination.
+3. Open a case. The customer name, date of birth and national ID are masked.
+4. Select **Claim case**. Then select **Reveal** for the national ID. Write a reason and select **Reveal field**. The audit history shows the reveal.
+5. Select **Approve** and confirm. The risk score is 70 or more, so the case waits for a KYC lead.
+6. Sign out. Sign in as `kyc-lead`. Open **KYC approvals** and select **Approve as KYC lead**. The case status changes to Approved.
+7. Sign in as `auditor`. Open the KYC queue. The data stays masked, and the page shows no Reveal or action buttons.
+
+A case with a risk score below 70 closes immediately when the analyst approves it. An analyst can escalate a case in review. Only a KYC lead can decide an escalated case. A step that is not valid returns HTTP 409. See `tools/kyc/runbooks/README.md` for operations.
+
 ## Development commands
 
 ```sh

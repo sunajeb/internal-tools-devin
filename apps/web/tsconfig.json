@@ -12,7 +12,8 @@
   },
   "references": [
     { "path": "../../packages/ui-kit" },
-    { "path": "../../tools/refunds" }
+    { "path": "../../tools/refunds" },
+    { "path": "../../tools/kyc" }
   ],
   "include": ["src"]
 }

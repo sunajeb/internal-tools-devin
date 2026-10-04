@@ -12,7 +12,9 @@
     { "name": "auditor" },
     { "name": "platform-admin" },
     { "name": "flag-editor" },
-    { "name": "flag-approver" }
+    { "name": "flag-approver" },
+    { "name": "kyc-analyst" },
+    { "name": "kyc-lead" }
   ],
   "clients": [
     {
@@ -152,6 +154,38 @@
         }
       ],
       "groups": ["/flag-approver"]
+    },
+    {
+      "username": "kyc-analyst",
+      "enabled": true,
+      "firstName": "Kendall",
+      "lastName": "Analyst",
+      "email": "kyc-analyst@example.test",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "LocalKycAnalyst123!",
+          "temporary": false
+        }
+      ],
+      "groups": ["/kyc-analyst"]
+    },
+    {
+      "username": "kyc-lead",
+      "enabled": true,
+      "firstName": "Lee",
+      "lastName": "Lead",
+      "email": "kyc-lead@example.test",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "LocalKycLead123!",
+          "temporary": false
+        }
+      ],
+      "groups": ["/kyc-lead"]
     }
   ]
 }
