@@ -756,10 +756,11 @@ function RefundDialog({
   const [error, setError] = useState('');
   const [idempotencyKey] = useState(() => crypto.randomUUID());
   const amountMinor = BigInt(amount || '0');
+  const cumulativeMinor = BigInt(charge.refunded_minor) + amountMinor;
   const tier =
-    amountMinor <= 25_000n
+    cumulativeMinor <= 25_000n
       ? 'Instant refund'
-      : amountMinor <= 500_000n
+      : cumulativeMinor <= 500_000n
         ? 'Supervisor approval'
         : 'Supervisor + Finance approval';
   const mutation = useMutation({

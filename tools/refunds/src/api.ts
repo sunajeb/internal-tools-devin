@@ -246,7 +246,7 @@ const routes = [
       if (charge.currency !== 'USD') {
         fail('Refund currency must match the payment currency.', 400);
       }
-      const tier = refundTier(amount);
+      const tier = refundTier(BigInt(charge.refunded_minor) + amount);
       if (tier.name === 'dual' && !user.roles.includes('supervisor')) {
         fail('Only a Supervisor can request a refund above $5,000.', 403);
       }
