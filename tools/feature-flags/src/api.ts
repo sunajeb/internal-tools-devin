@@ -168,8 +168,12 @@ export const featureFlagsRoutes = [
       const pending = await tx.query(
         `SELECT id,environment,enabled,rollout_percent,base_version,reason,requester_id,
                 approval_request_id,created_at
-         FROM feature_flags.change_requests
-         WHERE flag_id=$1 AND status='pending' ORDER BY created_at`,
+         FROM feature_flags.change_requests c
+         WHERE flag_id=$1 AND status='pending'
+           AND EXISTS (SELECT 1 FROM foundation.approval_requests a
+                       WHERE a.id=c.approval_request_id AND a.status='pending'
+                         AND a.expires_at>now())
+         ORDER BY created_at`,
         [row.id],
       );
       return {
@@ -255,6 +259,27 @@ export const featureFlagsRoutes = [
           'Give a reason of 10 or more characters for a production change.',
           400,
         );
+      }
+      const expired = await tx.query(
+        `UPDATE feature_flags.change_requests c SET status='expired',decided_at=now()
+         FROM foundation.approval_requests a
+         WHERE a.id=c.approval_request_id AND c.flag_id=$1 AND c.status='pending'
+           AND (a.status<>'pending' OR a.expires_at<=now())
+         RETURNING c.id,c.approval_request_id`,
+        [flagId],
+      );
+      for (const change of expired.rows) {
+        await audit({
+          action: 'feature-flags.production_change_expired',
+          objectType: 'flag',
+          objectId: key,
+          before: { status: 'pending' },
+          after: {
+            status: 'expired',
+            changeRequestId: change.id,
+            approvalRequestId: change.approval_request_id,
+          },
+        });
       }
       const open = await tx.query(
         `SELECT 1 FROM feature_flags.change_requests

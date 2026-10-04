@@ -465,6 +465,50 @@ describe.skipIf(!databaseUrl)('Feature-Flag Panel API with PostgreSQL', () => {
     expect(status.rows[0].status).toBe('pending');
   });
 
+  it('expires a change request when its approval expires', async () => {
+    const key = await createFlag('expiry');
+    const first = await requestProduction(key);
+    await pool.query(
+      `UPDATE foundation.approval_requests SET expires_at=now()-interval '1 minute'
+       WHERE id=$1`,
+      [first.approvalRequestId],
+    );
+    const detail = await send(
+      'editor',
+      'GET',
+      `/api/tools/feature-flags/flags/${key}`,
+    );
+    expect(detail.json().pendingChanges).toEqual([]);
+    const late = await send(
+      'approver',
+      'POST',
+      `/api/approvals/${first.approvalRequestId}/approve`,
+      {},
+    );
+    expect(late.statusCode).toBe(409);
+
+    const next = await send('editor', 'PUT', envUrl(key, 'production'), {
+      enabled: true,
+      rolloutPercent: 40,
+      expectedVersion: 1,
+      reason: 'A new request after the old approval expired.',
+    });
+    expect(next.statusCode, next.body).toBe(202);
+    const old = await pool.query(
+      'SELECT status FROM feature_flags.change_requests WHERE approval_request_id=$1',
+      [first.approvalRequestId],
+    );
+    expect(old.rows[0].status).toBe('expired');
+    const audit = await pool.query(
+      `SELECT 1 FROM foundation.audit_events
+       WHERE tool_id='feature-flags' AND object_id=$1
+         AND action='feature-flags.production_change_expired'`,
+      [key],
+    );
+    expect(audit.rowCount).toBe(1);
+    expect(await stateOf(key, 'production')).toMatchObject({ enabled: false });
+  });
+
   it('validates input and requires a reason for production', async () => {
     const key = await createFlag('validation');
     const tooHigh = await send('editor', 'PUT', envUrl(key, 'development'), {

@@ -10,6 +10,8 @@ const personaRoles = {
   auditor: ['auditor'],
   platform_admin: ['platform_admin'],
   agent_supervisor: ['agent', 'supervisor'],
+  flag_editor: ['flag_editor'],
+  flag_approver: ['flag_approver'],
   no_role: [],
 } satisfies Record<string, string[]>;
 type PersonaName = keyof typeof personaRoles;
@@ -23,6 +25,13 @@ const readers: PersonaName[] = [
   'agent_supervisor',
 ];
 const approvers: PersonaName[] = ['supervisor', 'finance', 'agent_supervisor'];
+const flagReaders: PersonaName[] = [
+  'flag_editor',
+  'flag_approver',
+  'auditor',
+  'platform_admin',
+];
+const missingFlag = 'matrix.missing_flag';
 const permissionDenied = 'You do not have permission to perform this action.';
 
 interface Fixture {
@@ -39,7 +48,7 @@ interface MatrixCase {
   allowedError?: string;
   deniedError?: string;
   request(fixture: Fixture): {
-    method: 'GET' | 'POST';
+    method: 'GET' | 'POST' | 'PUT';
     url: string;
     body?: unknown;
     headers?: Record<string, string>;
@@ -150,6 +159,45 @@ const cases: MatrixCase[] = [
       method: 'POST',
       url: '/api/admin/pause',
       body: { paused: f.paused },
+    }),
+  },
+  {
+    route: 'GET /api/tools/feature-flags/flags',
+    registered: true,
+    allowed: flagReaders,
+    allowedStatus: 200,
+    request: () => ({ method: 'GET', url: '/api/tools/feature-flags/flags' }),
+  },
+  {
+    route: 'GET /api/tools/feature-flags/flags/:key',
+    registered: true,
+    allowed: flagReaders,
+    allowedStatus: 404,
+    request: () => ({
+      method: 'GET',
+      url: `/api/tools/feature-flags/flags/${missingFlag}`,
+    }),
+  },
+  {
+    route: 'PUT /api/tools/feature-flags/flags/:key/environments/:environment',
+    registered: true,
+    allowed: ['flag_editor'],
+    allowedStatus: 404,
+    request: () => ({
+      method: 'PUT',
+      url: `/api/tools/feature-flags/flags/${missingFlag}/environments/staging`,
+      headers: { 'idempotency-key': randomUUID() },
+      body: { enabled: true, rolloutPercent: 10, expectedVersion: 1 },
+    }),
+  },
+  {
+    route: 'GET /api/tools/feature-flags/flags/:key/history',
+    registered: true,
+    allowed: flagReaders,
+    allowedStatus: 404,
+    request: () => ({
+      method: 'GET',
+      url: `/api/tools/feature-flags/flags/${missingFlag}/history`,
     }),
   },
   {
