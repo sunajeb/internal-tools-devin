@@ -8,7 +8,12 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { BadgeCheck, Flag, History, Search, ShieldCheck } from 'lucide-react';
-import { api, dateTime } from '@internal-tools/ui-kit';
+import {
+  api,
+  dateTime,
+  ErrorState,
+  LoadingState,
+} from '@internal-tools/ui-kit';
 
 type User = { id: string; displayName: string; roles: string[] };
 const environmentNames = ['development', 'staging', 'production'] as const;
@@ -187,10 +192,13 @@ function FlagList() {
           </span>
         </div>
         {flags.error && (
-          <div className="notice notice-warn" role="alert">
-            {flags.error.message}
-          </div>
+          <ErrorState
+            title="Could not load flags"
+            error={flags.error}
+            onRetry={() => void flags.refetch()}
+          />
         )}
+        {flags.isLoading && <LoadingState label="Loading flags" />}
         <div className="table-scroll">
           <table aria-label="Feature flags">
             <thead>
@@ -233,7 +241,7 @@ function FlagList() {
             </tbody>
           </table>
         </div>
-        {!flags.isLoading && items.length === 0 && (
+        {!flags.isLoading && !flags.error && items.length === 0 && (
           <div className="empty-state">
             <b>No flags found</b>
             <span>Change the search text and try again.</span>
@@ -341,7 +349,7 @@ function EnvironmentForm({
           </span>
         </label>
         <label className="field-label" htmlFor={`${id}-rollout`}>
-          Rollout percent for {environment} <span>0 to 100</span>
+          Rollout percent for {environment}
         </label>
         <input
           id={`${id}-rollout`}
@@ -353,13 +361,17 @@ function EnvironmentForm({
           max={100}
           step={1}
           required
+          aria-describedby={`${id}-rollout-hint`}
           value={rollout}
           onChange={(event) => setRollout(event.target.value)}
         />
+        <p id={`${id}-rollout-hint`} className="field-hint">
+          Use a whole number from 0 to 100.
+        </p>
         {production && (
           <>
             <label className="field-label" htmlFor={`${id}-reason`}>
-              Reason for production change <span>{reason.length}/500</span>
+              Reason for production change
             </label>
             <textarea
               id={`${id}-reason`}
@@ -368,9 +380,13 @@ function EnvironmentForm({
               required
               minLength={10}
               maxLength={500}
+              aria-describedby={`${id}-reason-hint`}
               value={reason}
               onChange={(event) => setReason(event.target.value)}
             />
+            <p id={`${id}-reason-hint`} className="field-hint">
+              Write 10 to 500 characters. {reason.length}/500 used.
+            </p>
           </>
         )}
         <div className="modal-actions" style={{ marginTop: 14 }}>
@@ -437,9 +453,9 @@ function FlagHistory({ flagKey }: { flagKey: string }) {
   };
   return (
     <section className="panel table-panel" aria-labelledby="history-title">
-      <div className="panel-head" style={{ padding: 18 }}>
-        <h2 id="history-title" style={{ display: 'flex', gap: 8, margin: 0 }}>
-          <History size={18} aria-hidden="true" /> Change history
+      <div className="panel-head">
+        <h2 id="history-title">
+          <History size={16} aria-hidden="true" /> Change history
         </h2>
       </div>
       <div className="table-scroll">
@@ -466,7 +482,15 @@ function FlagHistory({ flagKey }: { flagKey: string }) {
           </tbody>
         </table>
       </div>
-      {!history.isLoading && items.length === 0 && (
+      {history.error && (
+        <ErrorState
+          title="Could not load history"
+          error={history.error}
+          onRetry={() => void history.refetch()}
+        />
+      )}
+      {history.isLoading && <LoadingState label="Loading history" />}
+      {!history.isLoading && !history.error && items.length === 0 && (
         <div className="empty-state">
           <b>No changes yet</b>
           <span>The audit log has no events for this flag.</span>
@@ -504,16 +528,18 @@ function FlagDetailPage({ user }: { user: User }) {
     return (
       <div className="page">
         <PageHeader kicker="FEATURE FLAGS" title={key} detail="" />
-        <div className="notice notice-warn" role="alert">
-          {flag.error.message}
-        </div>
+        <ErrorState
+          title="Could not load the flag"
+          error={flag.error}
+          onRetry={() => void flag.refetch()}
+        />
         <Link className="secondary-btn" to={base}>
           Back to flags
         </Link>
       </div>
     );
   }
-  if (!flag.data) return <div className="loading">Loading flag…</div>;
+  if (!flag.data) return <LoadingState label="Loading flag" />;
   const data = flag.data;
   return (
     <div className="page">
@@ -669,7 +695,15 @@ function ApprovalsPage({ user }: { user: User }) {
             </article>
           );
         })}
-        {!approvals.isLoading && items.length === 0 && (
+        {approvals.error && (
+          <ErrorState
+            title="Could not load approvals"
+            error={approvals.error}
+            onRetry={() => void approvals.refetch()}
+          />
+        )}
+        {approvals.isLoading && <LoadingState label="Loading approvals" />}
+        {!approvals.isLoading && !approvals.error && items.length === 0 && (
           <div className="empty-state">
             <b>No changes wait for approval</b>
             <span>New production requests show here.</span>
