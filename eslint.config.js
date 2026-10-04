@@ -12,8 +12,6 @@ export default [
         projectService: {
           allowDefaultProject: [
             'apps/web/vite.config.ts',
-            'e2e/playwright.config.ts',
-            'e2e/specs/*.spec.ts',
             'scripts/new-tool.ts',
             'vitest.config.ts',
           ],
