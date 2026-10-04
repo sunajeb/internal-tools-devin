@@ -564,12 +564,17 @@ function registerApprovalRoutes(app: FastifyInstance, state: RuntimeState) {
     try {
       const result = await transaction(state.pool, async (client) => {
         const locked = await client.query(
-          'SELECT * FROM foundation.approval_requests WHERE id=$1 FOR UPDATE',
+          `SELECT *,expires_at <= now() AS expired
+           FROM foundation.approval_requests WHERE id=$1 FOR UPDATE`,
           [approvalId],
         );
-        const approval = locked.rows[0] as ApprovalRequestRecord | undefined;
+        const approval = locked.rows[0] as
+          (ApprovalRequestRecord & { expired: boolean }) | undefined;
         if (!approval || approval.status !== 'pending') {
           throw statusError('This approval is no longer open.', 409);
+        }
+        if (approval.expired) {
+          throw statusError('This approval has expired.', 409);
         }
         if (approval.requester_id === authorized.id) {
           await appendAudit(client, {

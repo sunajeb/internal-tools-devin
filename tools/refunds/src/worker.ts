@@ -156,6 +156,37 @@ async function recordException(
   );
 }
 
+async function resolveMatchedExceptions(pool: pg.Pool, key: string) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const resolved = await client.query(
+      `UPDATE refunds.reconciliation_exceptions
+       SET status='resolved',resolution_code='auto_matched',
+           resolution_note='Provider and internal records now match.',
+           resolved_by='service-worker',resolved_at=now()
+       WHERE reconciler='refunds-provider' AND reconciliation_key=$1 AND status='open'
+       RETURNING id,exception_type`,
+      [key],
+    );
+    for (const exception of resolved.rows) {
+      await appendWorkerAudit(client, {
+        action: 'reconciliation.exception_auto_resolved',
+        objectType: 'reconciliation_exception',
+        objectId: exception.id,
+        before: { status: 'open', exceptionType: exception.exception_type },
+        after: { status: 'resolved', resolutionCode: 'auto_matched' },
+      });
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function runReconciliation(pool: pg.Pool, provider: PaymentProvider) {
   const externalRefunds = await provider.listRefunds();
   const providerIds = new Set(externalRefunds.map((refund) => refund.id));
@@ -216,6 +247,7 @@ async function runReconciliation(pool: pg.Pool, provider: PaymentProvider) {
       });
       continue;
     }
+    await resolveMatchedExceptions(pool, external.id);
     if (row.status === 'executing' && external.status === 'pending') {
       await updateRefundStatus(pool, row.id, 'executing', external.id);
       await pool.query(
@@ -262,7 +294,20 @@ async function runReconciliation(pool: pg.Pool, provider: PaymentProvider) {
       : externalRefunds.some(
           (external) => external.idempotencyKey === refund.id,
         );
-    if (!providerRecordExists) {
+    if (providerRecordExists) {
+      await resolveMatchedExceptions(pool, refund.id);
+    } else if (
+      refund.status === 'executing' &&
+      refund.outbox_status === 'failed'
+    ) {
+      await updateRefundStatus(
+        pool,
+        refund.id,
+        'failed',
+        undefined,
+        'provider_unreachable',
+      );
+    } else {
       await recordException(pool, 'missing_external', refund.id, {
         refundId: refund.id,
         providerRefundId: refund.provider_refund_id,
