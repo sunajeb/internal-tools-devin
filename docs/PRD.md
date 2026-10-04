@@ -23,7 +23,7 @@ This product is a shared Foundation that supplies these controls one time, for a
 Two reference tools prove the Foundation:
 
 1. **Refunds Console** (deep). It is the highest-risk tool of the 3 current tools. It uses every Foundation capability at production quality.
-2. **Feature-Flag Panel** (small). A separate Devin session builds it on the Foundation. It proves that a new tool is fast to add and gets all controls with no extra work.
+2. **Feature-Flag Panel** (small). It is built on the Foundation. It proves that a new tool is fast to add and gets all controls with no extra work.
 
 ---
 
@@ -264,7 +264,7 @@ The priority uses MoSCoW: **M** = must, **S** = should, **C** = could.
 | FR-OB-3 | The Foundation must emit default metrics for each tool: request rate, errors, latency, pending approvals, outbox depth, failed executions, open exceptions. | M |
 | FR-OB-4 | The Foundation must supply default alerts and a runbook template. Each tool must add a runbook for each alert. | M |
 | FR-OB-5 | The Foundation must supply liveness and readiness health checks. | M |
-| FR-OB-6 | Devin Automations should open a session on CI failure and on selected alerts. | S |
+| FR-OB-6 | Devin Automations should start work on CI failures and on selected alerts. | S |
 
 ---
 
@@ -351,7 +351,7 @@ This tool is small on purpose. It proves G-1 and G-2.
 | FR-FF-5 | Services must read flags through a read-only API with a service token. | S |
 | FR-FF-6 | The tool must contain no authentication, authorization, audit, approval or logging code of its own. It must use the Foundation. | M |
 
-**Example of a future tool: KYC review queue.** No KYC tool exists in the prototype. A KYC queue could use the same Foundation: data classes and masking for documents and personal data, the approval engine for escalations, keyset search over the full queue, and the audit log for each document view.
+**Example of a future tool: KYC review queue.** No KYC tool exists in the prototype. A KYC queue could use the same Foundation. Data classes and masking protect documents and personal data. The approval engine handles escalations. Keyset search covers the full queue. The audit log records each document view.
 
 ---
 
@@ -493,7 +493,7 @@ Layer key: **F** = Foundation (all tools get it). **T** = tool-specific.
 8. **Tamper evidence.** Given a database administrator changes an audit row directly, with triggers disabled. When an Auditor runs verify, then verify reports the first broken event ID.
 9. **Kill switch.** Given a Platform Admin pauses refunds execution. Then approved refunds stay `approved` until resume. A banner and the metric `execution_paused` show the pause.
 10. **Route without permission.** Given a developer adds a route with no permission. Then the API does not start and the tests fail.
-11. **New tool inherits controls.** Given a separate Devin session builds the Feature-Flag Panel from the playbook. Then the PR adds only tool files (registry entry, routes, migration, pages, tests). The production flag change needs approval, writes audit events, with no new auth, audit, approval or logging code.
+11. **New tool inherits controls.** Given an engineer builds the Feature-Flag Panel from the playbook. Then the PR adds only tool files (registry entry, routes, migration, pages, tests). The production flag change needs approval, writes audit events, with no new auth, audit, approval or logging code.
 
 ---
 

@@ -268,7 +268,7 @@ hash(0) = SHA-256("genesis")
 1. The audit writer takes a transaction-level advisory lock, reads the last hash, computes the new hash and inserts. This serializes audit writes. Expected write volume (less than 50 for each second) permits this.
 2. A trigger refuses `UPDATE` and `DELETE`. The application database role has `INSERT` and `SELECT` only on this table. A separate owner role owns the table.
 3. `GET /api/audit/verify` recomputes the chain and returns the first broken `seq`, if any.
-4. **Production anchor (Not built).** The hash is not keyed, so a full rewrite of the chain is not detected without an external anchor. In production, the worker must export each hour the new events and the last hash to Azure Blob Storage with a locked time-based retention policy (WORM). A database administrator who rewrites the full chain cannot change the exported anchors. Microsoft states that locked WORM policies meet SEC 17a-4(f) storage requirements (Cohasset assessment).
+4. **Production anchor (Not built).** The hash is not keyed, so a full rewrite of the chain is not detected without an external anchor. In production, the worker must export the new events and the last hash each hour. The target is Azure Blob Storage with a locked time-based retention policy (WORM). A database administrator who rewrites the full chain cannot change the exported anchors. Microsoft states that locked WORM policies meet SEC 17a-4(f) storage requirements (Cohasset assessment).
 5. **SIEM (Not built).** The same export must go to the company SIEM through Azure Monitor diagnostic settings or a log forwarder.
 
 ### 8.3 What creates an audit event
@@ -400,7 +400,7 @@ interface PaymentProvider {
 }
 ```
 
-Implementations: `SimulatorProvider` (default), `StripeProvider` (test mode, enabled when `STRIPE_SECRET_KEY` is present). The simulator supports fault injection through headers or config: timeout, 500 error, duplicate webhook, out-of-order webhook, and a "ghost refund" that exists only at the provider. The tests use these faults for acceptance criteria 5 to 7.
+Implementations: `SimulatorProvider` (default), `StripeProvider` (test mode, enabled when `STRIPE_SECRET_KEY` is present). The simulator injects faults through headers or config. The faults are timeout, 500 error, duplicate webhook and out-of-order webhook. A "ghost refund" exists only at the provider. The tests use these faults for acceptance criteria 5 to 7.
 
 ---
 
@@ -417,7 +417,13 @@ Implementations: `SimulatorProvider` (default), `StripeProvider` (test mode, ena
 ## 12. Web application
 
 1. One shell: top bar with user, roles and environment badge; left navigation from the registry (only tools that the user can open).
-2. Shared components: `DataTable` (server-side filters, keyset pages), `Form` (Zod schema shared with API), `ApprovalInbox` (all tools), `AuditViewer`, `MaskedField` (reveal button calls the API and creates an audit event), `ConfirmDialog` with idempotency key.
+2. Shared components:
+   - `DataTable` uses server-side filters and keyset pages.
+   - `Form` uses a Zod schema that the API also uses.
+   - `ApprovalInbox` serves all tools.
+   - `AuditViewer` shows audit events.
+   - `MaskedField` calls the API to reveal a value. The API writes an audit event.
+   - `ConfirmDialog` sends an idempotency key.
 3. Refunds pages: search, charge detail, request form with live tier preview, inbox, refund detail with timeline, exceptions queue, dashboard.
 4. Accessibility: semantic HTML, keyboard navigation, axe checks in Playwright.
 
@@ -561,9 +567,9 @@ infra/terraform/
 
 | Activity | How Devin does it | Human role |
 |---|---|---|
-| Build a new tool | Playbook "Add an internal tool" in `.devin/`. A request from Slack or Linear starts a session. Devin runs `scripts/new-tool.ts`, writes the domain code and tests, and opens a PR. | Tool owner writes the request. An engineer reviews and merges. |
+| Build a new tool | Playbook "Add an internal tool" in `.devin/`. A request from Slack or Linear starts the work. Devin runs `scripts/new-tool.ts`, writes the domain code and tests, and opens a PR. | Tool owner writes the request. An engineer reviews and merges. |
 | Change a policy | Devin changes configuration and tests, and opens a PR. | Finance approves the change. Engineer reviews. |
-| CI failure | A Devin Automation on CI failure opens a session that diagnoses and pushes a fix PR. | Engineer reviews. |
+| CI failure | A Devin Automation on CI failure diagnoses the failure and opens a fix PR. | Engineer reviews. |
 | Dependency and security updates | Dependabot opens PRs. Devin fixes breaking changes. | Engineer reviews. |
 | Incident triage | A Devin Automation on an alert reads logs and traces and proposes a fix or a runbook action. | On-call engineer decides. |
 

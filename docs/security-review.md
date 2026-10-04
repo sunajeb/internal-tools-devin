@@ -1,6 +1,6 @@
 # Security review: Foundation and Refunds Console
 
-- Base: `devin/1791105966-foundation-refunds` (review started at `a342626`; branch updated to `9953df0`).
+- Scope: Foundation and Refunds Console.
 - Date: 2026-10-04.
 - Method: source review, attacks on the local Docker Compose stack, and Vitest tests on the real Postgres.
 - Users: the six local Keycloak users. Data: synthetic seed data only.
@@ -12,7 +12,8 @@
 - SR-01 (High) is open. One unauthenticated request stops the API process. The fix is in `apps/api/src/server.ts`. The shared rules lock that file. The exact patch is in this document.
 - SR-02 (High) is fixed in this PR. An Agent could split a large refund to avoid the Supervisor-only rule and dual approval.
 - Seven findings are in `packages/foundation/**`. SR-04 is now fixed on the base. This PR does not change Foundation code. Each open Foundation finding has an exact proposed patch.
-- The main controls work: CSRF, self-approval denial (also for `agent-supervisor`), approval step order, webhook HMAC and replay window, idempotency binding, SQL parameters, mass-assignment protection, masking, log redaction, and audit immutability for `app_runtime`.
+- The main controls work. They include CSRF, self-approval denial (also for `agent-supervisor`), approval step order, and webhook HMAC with a replay window.
+- Idempotency binding, SQL parameters, mass-assignment protection, masking, log redaction, and audit immutability for `app_runtime` also work.
 
 ## How to run the tests
 
@@ -22,7 +23,7 @@ npm test
 ```
 
 - `apps/api/test/permission-matrix.test.ts`: calls every registered route and every core route as 7 personas and as an anonymous caller. A new route that is not in the matrix makes the test fail.
-- `apps/api/test/security-controls.test.ts`: route permission declaration, self-approval and audit, approval steps, split refunds, mass assignment, idempotency, CSRF, webhook signature and replay, SQL input, masking, and `app_runtime` privileges.
+- `apps/api/test/security-controls.test.ts` tests route permissions, self-approval and audit, approval steps, split refunds, and mass assignment. It also tests idempotency, CSRF, webhook signature and replay, SQL input, masking, and `app_runtime` privileges.
 - The tests build the API in-process with `buildServer()`. The API connects as `app_runtime`. Fixture setup and cleanup use the owner role.
 - CI sets `RUNTIME_DB_PASSWORD` so that `npm run db:migrate` creates `app_runtime` for these tests.
 
@@ -403,7 +404,7 @@ GET /api/charges?q=nobody-zz@example.test -> 200 {"items":[],"nextCursor":null}
 ### SR-11 (Medium): `app_runtime` can rewrite approval records
 
 - Cause: `apps/api/src/migrate.ts` lines 64-77 grant `SELECT, INSERT, UPDATE, DELETE` on all tables in the application schemas. Only `foundation.audit_events` loses `UPDATE` and `DELETE`.
-- Verified: `app_runtime` cannot update, delete, or truncate audit events, cannot disable the trigger, cannot create tables in `public`, and has no superuser, `CREATEROLE`, `CREATEDB`, or `BYPASSRLS`. Tests cover this.
+- Verified: `app_runtime` cannot update, delete, or truncate audit events. It cannot disable the trigger or create tables in `public`. It has no superuser, `CREATEROLE`, `CREATEDB`, or `BYPASSRLS`. Tests cover this.
 - Gap: `app_runtime` can `UPDATE` or `DELETE` rows in `foundation.approvals`, `foundation.approval_requests`, `foundation.policy_versions`, and `foundation.tool_settings`. It can also `INSERT` audit events with a valid hash chain, because the chain has no key. A SQL injection bug or a stolen runtime password can therefore forge an approval and its audit trail.
 - Proposed patch (append after the existing `REVOKE`):
 

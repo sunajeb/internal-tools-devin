@@ -39,7 +39,7 @@ flowchart LR
 
 ### User interface
 
-The console uses a Notion-style design:
+The console uses a simple, document-style design:
 
 - The font is Inter (`@fontsource-variable/inter`).
 - The colors are warm neutrals, for example `--ink: #37352f` and `--sidebar: #f7f7f5`. The design tokens are in `apps/web/src/style.css`.
@@ -399,7 +399,6 @@ These commands use `postgres://tools:local-development-only@localhost:5432/inter
 | `docs/PRD.md`, `docs/SYSTEM_DESIGN.md`              | Product and design specifications                                                                    |
 | `docs/adr`, `docs/runbooks`, `docs/threat-model.md` | Decisions, operator guides, and the threat model                                                     |
 | `docs/images`                                       | Screenshots from the end-to-end suite                                                                |
-| `docs/clean-clone-report.md`                        | Step log of a clean-machine review of this README                                                    |
 | `.devin`                                            | Tool development playbook and repository knowledge                                                   |
 | `.github/workflows`                                 | CI: lint, typecheck, tests, end-to-end, dependency rules, security scans, Terraform checks           |
 
@@ -497,8 +496,17 @@ Known limits:
 | Playwright cannot start Chromium on Linux                                         | System libraries are missing.                                      | Run `npx playwright install --with-deps chromium`.                                                                                               |
 | A command fails with a Node.js syntax or engine error                             | The Node.js version is not 22.                                     | Run `nvm use 22`.                                                                                                                                |
 | A refund demo shows a different status than the README                            | The demos changed data. Each demo expects a new stack.             | Run `docker compose down -v`, then `docker compose up -d --build --wait`. Run the demos in order.                                                |
+| `platform-admin` sees no **Refunds** page                                         | This role can open only **Overview** and **Audit & controls**.     | Use `supervisor` to see refund status.                                                                                                           |
+| **Reveal** does not show the email                                                | The API needs a reason of at least 10 characters.                  | Type a reason, then click **Reveal email**.                                                                                                      |
 | You want a clean start                                                            | Old data is in the Docker volumes.                                 | Run `docker compose down -v`, then `docker compose up -d --build --wait`.                                                                        |
 
 ## Security and production limits
 
-Use only synthetic records in this prototype. Do not add production data or credentials. The local passwords and `.env.example` values are not production secrets. Before production use, the team must review the threat model, configure a production identity provider, set up secret storage, deploy a managed database, test recovery, and complete the deployment work.
+Use only synthetic records in this prototype. Do not add production data or credentials. The local passwords and `.env.example` values are not production secrets. Before production use, the team must do these tasks:
+
+- Review the threat model.
+- Configure a production identity provider.
+- Set up secret storage.
+- Deploy a managed database.
+- Test recovery.
+- Complete the deployment work.
