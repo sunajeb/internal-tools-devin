@@ -118,14 +118,16 @@ Expected results:
 
 ## Seeded logins
 
-| Username           | Password              | Roles                | Main permissions                                                                  |
-| ------------------ | --------------------- | -------------------- | --------------------------------------------------------------------------------- |
-| `agent`            | `LocalAgent123!`      | Agent                | Search payments. Request refunds up to $5,000.                                    |
-| `supervisor`       | `LocalSupervisor123!` | Supervisor           | Request any refund. Approve the Supervisor step. Reveal customer email.           |
-| `finance`          | `LocalFinance123!`    | Finance              | Approve the Finance step. Run reconciliation. Resolve exceptions. Export CSV.     |
-| `auditor`          | `LocalAuditor123!`    | Auditor              | Read refunds and audit events. Verify the audit chain. Export CSV.                |
-| `platform-admin`   | `LocalPlatform123!`   | Platform Admin       | Pause and resume refund execution. Read audit events.                             |
-| `agent-supervisor` | `LocalDualRole123!`   | Agent and Supervisor | Use this account to see the self-approval block and to approve a Supervisor step. |
+| Username           | Password              | Roles                | Main permissions                                                                     |
+| ------------------ | --------------------- | -------------------- | ------------------------------------------------------------------------------------ |
+| `agent`            | `LocalAgent123!`      | Agent                | Search payments. Request refunds up to $5,000.                                       |
+| `supervisor`       | `LocalSupervisor123!` | Supervisor           | Request any refund. Approve the Supervisor step. Reveal customer email.              |
+| `finance`          | `LocalFinance123!`    | Finance              | Approve the Finance step. Run reconciliation. Resolve exceptions. Export CSV.        |
+| `auditor`          | `LocalAuditor123!`    | Auditor              | Read refunds, audit events and masked KYC cases. Verify the audit chain. Export CSV. |
+| `platform-admin`   | `LocalPlatform123!`   | Platform Admin       | Pause and resume refund execution. Read audit events.                                |
+| `agent-supervisor` | `LocalDualRole123!`   | Agent and Supervisor | Use this account to see the self-approval block and to approve a Supervisor step.    |
+| `kyc-analyst`      | `LocalKycAnalyst123!` | KYC Analyst          | Claim KYC cases, reveal one field with a reason, approve, reject or escalate.        |
+| `kyc-lead`         | `LocalKycLead123!`    | KYC Lead             | KYC Analyst work, decide escalated cases, approve high-risk requests from others.    |
 
 These accounts are for local development only. Do not use these passwords in other systems.
 
