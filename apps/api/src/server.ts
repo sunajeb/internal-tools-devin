@@ -16,6 +16,7 @@ import {
   allowInsecureRequests,
   authorizationCodeGrant,
   buildAuthorizationUrl,
+  buildEndSessionUrl,
   calculatePKCECodeChallenge,
   discovery,
   randomNonce,
@@ -160,6 +161,15 @@ export async function buildServer(options: BuildServerOptions = {}) {
   >();
   let oidcConfig: Awaited<ReturnType<typeof discovery>> | undefined;
 
+  const publicOidcUrl = (url: URL) => {
+    const publicBase = env.OIDC_PUBLIC_BASE_URL;
+    if (!publicBase) return url;
+    const rewritten = new URL(url.href);
+    const publicUrl = new URL(publicBase);
+    rewritten.protocol = publicUrl.protocol;
+    rewritten.host = publicUrl.host;
+    return rewritten;
+  };
   const discoverOidc = async () => {
     const issuer = new URL(oidcIssuer);
     const allowLocalHttp =
@@ -291,15 +301,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
         code_challenge: challenge,
         code_challenge_method: 'S256',
       });
-      const publicBase = env.OIDC_PUBLIC_BASE_URL;
-      if (publicBase) {
-        const redirectUrl = new URL(url.href);
-        const publicUrl = new URL(publicBase);
-        redirectUrl.protocol = publicUrl.protocol;
-        redirectUrl.host = publicUrl.host;
-        return reply.redirect(redirectUrl.href);
-      }
-      return reply.redirect(url.href);
+      return reply.redirect(publicOidcUrl(url).href);
     } catch (error) {
       request.log.error({ error }, 'OIDC sign-in could not start');
       return reply
@@ -340,9 +342,9 @@ export async function buildServer(options: BuildServerOptions = {}) {
       const displayName = String(claims.name ?? userId);
       const sessionId = randomBytes(32).toString('base64url');
       await database.query(
-        `INSERT INTO foundation.sessions(id,user_id,display_name,roles)
-         VALUES($1,$2,$3,$4)`,
-        [sessionId, userId, displayName, roles],
+        `INSERT INTO foundation.sessions(id,user_id,display_name,roles,id_token)
+         VALUES($1,$2,$3,$4,$5)`,
+        [sessionId, userId, displayName, roles, tokens.id_token ?? null],
       );
       reply.setCookie(cookieName, sessionId, {
         httpOnly: true,
@@ -394,10 +396,13 @@ export async function buildServer(options: BuildServerOptions = {}) {
     }
     const user = await currentUser(request);
     const sessionId = (request as ApiRequest).cookies[cookieName];
+    let idToken: string | undefined;
     if (sessionId) {
-      await database.query('DELETE FROM foundation.sessions WHERE id=$1', [
-        sessionId,
-      ]);
+      const deleted = await database.query<{ id_token: string | null }>(
+        'DELETE FROM foundation.sessions WHERE id=$1 RETURNING id_token',
+        [sessionId],
+      );
+      idToken = deleted.rows[0]?.id_token ?? undefined;
       if (user) {
         await inTransaction(database, (client) =>
           appendAudit(client, {
@@ -415,7 +420,21 @@ export async function buildServer(options: BuildServerOptions = {}) {
     }
     reply.clearCookie(cookieName, { path: '/' });
     reply.clearCookie('csrf', { path: '/' });
-    return { ok: true };
+    let logoutUrl: string | undefined;
+    try {
+      oidcConfig ??= await discoverOidc();
+      logoutUrl = publicOidcUrl(
+        buildEndSessionUrl(oidcConfig, {
+          post_logout_redirect_uri: new URL('/', oidcRedirectUri).href,
+          ...(idToken
+            ? { id_token_hint: idToken }
+            : { client_id: oidcClientId }),
+        }),
+      ).href;
+    } catch (error) {
+      request.log.warn({ error }, 'OIDC sign-out URL is not available');
+    }
+    return { ok: true, logoutUrl };
   });
 
   const auditUser = async (request: FastifyRequest, reply: FastifyReply) => {

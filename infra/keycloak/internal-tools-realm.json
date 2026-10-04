@@ -29,6 +29,9 @@
       "directAccessGrantsEnabled": false,
       "redirectUris": ["http://localhost:5173/auth/callback"],
       "webOrigins": ["http://localhost:5173"],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:5173/"
+      },
       "protocolMappers": [
         {
           "name": "groups",
