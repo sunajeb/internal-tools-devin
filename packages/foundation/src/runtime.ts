@@ -143,6 +143,12 @@ export class HttpError extends Error {
   }
 }
 
+function httpStatusOf(error: unknown): number | undefined {
+  if (typeof error !== 'object' || error === null) return undefined;
+  const statusCode: unknown = Reflect.get(error, 'statusCode');
+  return typeof statusCode === 'number' ? statusCode : undefined;
+}
+
 const genericFailureMessage = 'The request could not be completed. Try again.';
 
 function sendRouteError(
@@ -150,8 +156,9 @@ function sendRouteError(
   reply: FastifyReply,
   error: unknown,
 ) {
-  if (error instanceof HttpError) {
-    return reply.code(error.statusCode).send({ error: error.message });
+  const statusCode = httpStatusOf(error);
+  if (error instanceof Error && statusCode) {
+    return reply.code(statusCode).send({ error: error.message });
   }
   request.log.error({ err: error }, 'Foundation route failed');
   return reply.code(500).send({ error: genericFailureMessage });

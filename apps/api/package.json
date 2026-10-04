@@ -13,6 +13,8 @@
     "@fastify/helmet": "^12.0.1",
     "@fastify/rate-limit": "^10.2.1",
     "fastify-raw-body": "^5.0.0",
+    "@internal-tools/feature-flags": "*",
+    "@internal-tools/feature-flags": "*",
     "@internal-tools/foundation": "*",
     "@internal-tools/refunds": "*",
     "fastify": "^5.2.1",
