@@ -437,6 +437,8 @@ Database access uses the `pg` driver with parameterized SQL. Drizzle was removed
 
 The folder `infra/terraform` has Azure Terraform for `dev`, `staging`, and `prod`. CI runs `terraform fmt`, `terraform validate`, TFLint, and Trivy on it. Nobody has applied it. It creates no cloud resources in this prototype.
 
+In the Terraform design, the web app and the worker connect to PostgreSQL with their managed identities. Nobody has tested this path on Azure. `databaseConfig()` in `packages/foundation/src/database.ts` reads `PGHOST`, `PGPORT`, `PGUSER`, and `PGDATABASE` and uses an Entra access token as the password. If `DATABASE_URL` is set, the code uses it first. Docker Compose sets `DATABASE_URL`. With `NODE_ENV=production`, the API, the worker, and the migration script stop at startup if they find no database setting.
+
 Modules: `network`, `postgres`, `app_service`, `worker`, `registry`, `key_vault`, `monitoring`, `alerts`, `storage_worm`, `front_door`, and `identity`.
 
 To validate it locally, install Terraform, TFLint, and Trivy. Then run:

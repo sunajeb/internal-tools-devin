@@ -15,4 +15,4 @@ The vault ID, name, and URI.
 ## Important notes
 
 Soft-delete retention is 90 days. Purge protection is enabled and cannot be disabled.
-Create the `session-secret` value outside Terraform. Terraform state contains the generated OIDC client secret.
+Create the `session-secret`, `webhook-secret`, and `stripe-secret-key` values outside Terraform. Terraform state contains the generated OIDC client secret.

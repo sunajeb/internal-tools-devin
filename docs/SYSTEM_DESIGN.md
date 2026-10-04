@@ -500,6 +500,7 @@ infra/terraform/
 1. CI runs `terraform fmt -check`, `terraform validate` and `tflint` on each PR (FR-CI-4).
 2. The prototype does not run `terraform plan` or `terraform apply`. Nobody has applied the Terraform. There is no live Azure deployment. Production apply needs a separate pipeline with manual approval.
 3. Postgres: geo-redundant backup can be set only at server creation, so the module sets it at creation. Default backup retention is 7 days; the module sets 35 days, the maximum. Microsoft states a typical RPO of up to 5 minutes for point-in-time restore, which meets NFR-AV-2. Nobody has measured the RPO or the RTO for this design.
+4. Database access (design, not tested on Azure): the web app, its staging slot, and the worker connect to PostgreSQL with their managed identities. No database password exists. The helper `packages/foundation/src/database.ts` gets an Entra access token for each new connection. Local Docker Compose sets `DATABASE_URL`, and the helper uses it first.
 
 ### 15.3 Release process
 

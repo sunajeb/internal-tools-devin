@@ -2,14 +2,12 @@ import { readdir, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import pg from 'pg';
+import { databaseConfig } from '@internal-tools/foundation';
 
 const runtimeRole = 'app_runtime';
-const pool = new pg.Pool({
-  connectionString:
-    process.env.MIGRATION_DATABASE_URL ??
-    process.env.DATABASE_URL ??
-    'postgres://tools:local-development-only@localhost:5432/internal_tools',
-});
+const pool = new pg.Pool(
+  databaseConfig({ urlVariables: ['MIGRATION_DATABASE_URL', 'DATABASE_URL'] }),
+);
 
 async function sqlFiles(directory: string): Promise<string[]> {
   const entries = await readdir(directory).catch(() => [] as string[]);

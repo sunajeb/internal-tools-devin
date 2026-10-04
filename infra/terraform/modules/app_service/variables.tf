@@ -80,6 +80,14 @@ variable "oidc_issuer" {
   type = string
 }
 
+variable "oidc_redirect_uri" {
+  type = string
+}
+
+variable "app_environment" {
+  type = string
+}
+
 variable "tags" {
   type = map(string)
 }

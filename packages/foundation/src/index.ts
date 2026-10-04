@@ -6,3 +6,4 @@ export * from './masking.js';
 export * from './registry.js';
 export * from './retry.js';
 export * from './runtime.js';
+export * from './database.js';
