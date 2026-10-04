@@ -131,5 +131,6 @@ The app must emit `outbox_failed_total` for its query alert to detect failed out
 | `AZU-0057` | Blob diagnostics use a separate diagnostic setting. The scanner checks account-level properties. | `modules/storage_worm/main.tf` |
 | `AZU-0058` | Development and staging use required ZRS replication. Production uses GZRS. | `modules/storage_worm/main.tf` |
 | `AZU-0060` | This prototype uses platform-managed keys. The client owns future CMK provisioning and rotation. | `modules/storage_worm/main.tf` |
+| TFLint `azurerm_app_service_missing_auto_heal_setting` | Health check eviction replaces unhealthy instances. A request-count trigger recycles healthy instances. | `modules/app_service/main.tf`, `modules/worker/main.tf` |
 
-Each exception has a reason beside its inline Trivy directive.
+Each exception has a reason beside its inline Trivy or TFLint directive.

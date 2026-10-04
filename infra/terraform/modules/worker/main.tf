@@ -12,7 +12,7 @@ resource "azurerm_service_plan" "main" {
 # This private worker accepts no clients and is not user-facing; the web app owns Entra OIDC.
 #trivy:ignore:AZU-0001
 #trivy:ignore:AZU-0003
-# tflint-ignore: azurerm_app_service_missing_auto_heal_setting
+# tflint-ignore: azurerm_app_service_missing_auto_heal_setting # Health check eviction replaces unhealthy instances. A request-count trigger recycles healthy instances.
 resource "azurerm_linux_web_app" "main" {
   name                          = var.name
   resource_group_name           = var.resource_group_name
