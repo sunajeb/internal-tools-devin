@@ -32,16 +32,18 @@ Requirements: Docker Compose and Node.js 22.
 
 Compose starts PostgreSQL, Keycloak, the payment simulator, the API, the worker, the web console, Jaeger, and Prometheus. The API applies the SQL migration and loads 100,000 synthetic charges with demo refunds and one reconciliation exception. Compose stays running until you stop it with `docker compose down`.
 
-| Account            | Password              | Role                 |
-| ------------------ | --------------------- | -------------------- |
-| `agent`            | `LocalAgent123!`      | Agent                |
-| `supervisor`       | `LocalSupervisor123!` | Supervisor           |
-| `finance`          | `LocalFinance123!`    | Finance              |
-| `auditor`          | `LocalAuditor123!`    | Auditor              |
-| `platform-admin`   | `LocalPlatform123!`   | Platform Admin       |
-| `agent-supervisor` | `LocalDualRole123!`   | Agent and Supervisor |
+| Account            | Password                | Role                 |
+| ------------------ | ----------------------- | -------------------- |
+| `agent`            | `LocalAgent123!`        | Agent                |
+| `supervisor`       | `LocalSupervisor123!`   | Supervisor           |
+| `finance`          | `LocalFinance123!`      | Finance              |
+| `auditor`          | `LocalAuditor123!`      | Auditor              |
+| `platform-admin`   | `LocalPlatform123!`     | Platform Admin       |
+| `agent-supervisor` | `LocalDualRole123!`     | Agent and Supervisor |
+| `flag-editor`      | `LocalFlagEditor123!`   | Flag Editor          |
+| `flag-approver`    | `LocalFlagApprover123!` | Flag Approver        |
 
-These accounts and passwords are for local development only. Do not reuse them outside this stack. The realm also has feature-flag role groups for later work. The Feature-Flag Panel is not part of this prototype.
+These accounts and passwords are for local development only. Do not reuse them outside this stack.
 
 ## Try the main flows
 
@@ -53,6 +55,28 @@ These accounts and passwords are for local development only. Do not reuse them o
 6. Sign in as `finance`. Open Reconciliation to review the seeded exception, or run a provider reconciliation.
 
 The payment simulator supports duplicate requests, transient errors, provider failures, signed webhooks, and provider-only refunds. Its admin API uses the local-only `SIM_ADMIN_TOKEN` value in `.env.example`. The optional Stripe test adapter requires a Stripe test-mode key and a mapped `provider_charge_id` on each Stripe-backed charge; the synthetic demo charges use the simulator.
+
+## Feature-Flag Panel
+
+The Feature-Flag Panel is the second tool. It uses the Foundation for sign-in, access checks, CSRF, idempotency, approvals, audit events and logs. It adds no tool-specific copy of these controls.
+
+- Each flag has a state for `development`, `staging` and `production`. A state has an on or off value and a rollout percent from 0 to 100.
+- A `flag_editor` changes `development` and `staging` immediately. The audit log records the state before and after the change.
+- A production change creates a Foundation approval. A `flag_approver` who is not the requester must approve it. The approval applies the change in the same database transaction.
+- `auditor` and `platform_admin` can read flags, approvals and history. They cannot change flags.
+
+Demo steps:
+
+1. Sign in as `flag-editor`. Open Feature flags.
+2. Search for `dark`. Open `dashboard.dark_mode`.
+3. Set the staging rollout percent to 25. Select Save staging. The history shows the change.
+4. In Production, select Enabled in production. Set the rollout percent. Write a reason with at least 10 characters. Select Request production change. Production does not change yet.
+5. Sign out. Sign in as `flag-approver`. Open Flag approvals.
+6. Find the request. Select Approve. The page shows the new production state.
+7. Open the flag. The production state and the history show the approved change.
+8. Sign in as `auditor`. Open the flag. The controls are disabled.
+
+Code and controls are in `tools/feature-flags`. The runbook is in `tools/feature-flags/runbooks/README.md`.
 
 ## Development commands
 

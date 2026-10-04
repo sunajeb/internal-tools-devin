@@ -1,5 +1,6 @@
 const webToolModules = await Promise.all([
   import('@internal-tools/refunds/web'),
+  import('@internal-tools/feature-flags/web'),
   // <DEVIN-WEB-TOOL-REGISTRY>
 ]);
 
