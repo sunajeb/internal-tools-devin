@@ -4,6 +4,7 @@ resource "azurerm_service_plan" "main" {
   location               = var.location
   os_type                = "Linux"
   sku_name               = "P1v3"
+  worker_count           = var.worker_count
   zone_balancing_enabled = var.zone_balancing_enabled
   tags                   = var.tags
 }
@@ -27,10 +28,6 @@ resource "azurerm_linux_web_app" "main" {
     PGDATABASE                            = var.postgres_database_name
     PGSSLMODE                             = "require"
     PGUSER                                = var.name # The PostgreSQL Entra principal uses the worker app name.
-    SESSION_SECRET                        = "@Microsoft.KeyVault(VaultName=${var.key_vault_name};SecretName=session-secret)"
-    OIDC_CLIENT_SECRET                    = "@Microsoft.KeyVault(VaultName=${var.key_vault_name};SecretName=oidc-client-secret)"
-    OIDC_CLIENT_ID                        = var.oidc_client_id
-    OIDC_ISSUER                           = var.oidc_issuer
   }
 
   identity {
@@ -46,6 +43,9 @@ resource "azurerm_linux_web_app" "main" {
     vnet_route_all_enabled                  = true
     app_command_line                        = var.worker_command
     health_check_path                       = "/healthz" # The worker must listen on WEBSITES_PORT and answer /healthz for App Service probes.
+    health_check_eviction_time_in_min       = 5
+    ip_restriction_default_action           = "Deny"
+    scm_ip_restriction_default_action       = "Deny"
     container_registry_use_managed_identity = true
     auto_heal_setting {
       trigger {

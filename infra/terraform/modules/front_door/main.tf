@@ -64,7 +64,7 @@ resource "azurerm_cdn_frontdoor_firewall_policy" "main" {
   mode                = "Prevention"
 
   managed_rule {
-    type    = "DefaultRuleSet"
+    type    = "Microsoft_DefaultRuleSet"
     version = "2.1"
     action  = "Block"
   }

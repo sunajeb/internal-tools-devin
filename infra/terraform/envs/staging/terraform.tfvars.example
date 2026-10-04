@@ -1,5 +1,4 @@
 project                     = "itf"
-environment                 = "staging"
 location                    = "westeurope"
 unique_suffix               = "abc123"
 subscription_id             = "00000000-0000-0000-0000-000000000000"

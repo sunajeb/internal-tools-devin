@@ -45,6 +45,11 @@ flowchart TD
 
 Each environment defines its own backend key and resource settings. The `dev`, `staging`, and `prod` roots use separate state.
 
+## Design decisions
+
+The registry keeps public network access so GitHub-hosted runners can push images. Admin user and anonymous pull remain disabled.
+The client can move the registry behind a private endpoint and use self-hosted runners.
+
 ## Local validation
 
 Install Terraform 1.16.5, TFLint 0.64.0, and Trivy 0.75.0. TFLint uses the AzureRM ruleset 0.32.0.
@@ -81,7 +86,7 @@ The client owns state storage, access control, recovery, and retention. This rep
 ## Post-apply steps
 
 1. Create the `session-secret` value in Key Vault outside Terraform.
-2. Connect to PostgreSQL with an Entra administrator. Create app and worker principals with `pgaadauth_create_principal`.
+2. Connect to PostgreSQL with an Entra administrator. Create web app, staging slot, and worker principals with `pgaadauth_create_principal`.
 3. Push the first application image to ACR from an authorized GitHub-hosted runner.
 4. Deploy each release to the staging slot. Warm `/healthz` and check logs before swapping slots.
 5. Confirm the production slot serves traffic. Keep the previous slot available for rollback.
@@ -105,7 +110,7 @@ The app must emit `outbox_failed_total` for its query alert to detect failed out
 | Private database | Delegated subnet, disabled public access, and explicit NSG rules | `modules/postgres/main.tf`, `modules/network/main.tf` |
 | Point-in-time recovery | 35-day backup retention and geo-redundant backup | `modules/postgres/main.tf` |
 | High availability | Zone-redundant PostgreSQL only in production | `envs/prod/main.tf`, `modules/postgres/main.tf` |
-| WORM audit anchors | Versioning, 30-day deletion recovery, immutable container, seven-year production retention | `modules/storage_worm/main.tf` |
+| WORM audit anchors | 30-day deletion recovery, immutable container, seven-year production retention | `modules/storage_worm/main.tf` |
 | Web application firewall | Front Door Premium managed rules and request rate limiting | `modules/front_door/main.tf` |
 | Secret storage | Private Key Vault, RBAC, and Key Vault references | `modules/key_vault/main.tf`, `modules/app_service/main.tf` |
 | Managed identities | ACR pull role assignments; no registry admin credentials | `modules/app_service/main.tf`, `modules/worker/main.tf`, `modules/registry/main.tf` |

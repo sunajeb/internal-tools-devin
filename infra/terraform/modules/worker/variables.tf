@@ -45,18 +45,6 @@ variable "postgres_database_name" {
   type = string
 }
 
-variable "key_vault_name" {
-  type = string
-}
-
-variable "oidc_client_id" {
-  type = string
-}
-
-variable "oidc_issuer" {
-  type = string
-}
-
 variable "application_insights_connection_string" {
   type      = string
   sensitive = true
@@ -69,6 +57,10 @@ variable "log_analytics_workspace_id" {
 variable "zone_balancing_enabled" {
   type    = bool
   default = false
+}
+
+variable "worker_count" {
+  type = number
 }
 
 variable "tags" {

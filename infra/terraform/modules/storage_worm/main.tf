@@ -18,7 +18,8 @@ resource "azurerm_storage_account" "main" {
   default_to_oauth_authentication   = true
 
   blob_properties {
-    versioning_enabled = true
+    # Container-level WORM is the documented scope for accounts without versioning. Version-level WORM requires versioning and is a different model.
+    versioning_enabled = false
     delete_retention_policy {
       days = 30
     }

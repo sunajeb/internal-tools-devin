@@ -39,6 +39,10 @@ resource "azurerm_linux_web_app" "main" {
   client_affinity_enabled       = false
   app_settings                  = local.app_settings
 
+  sticky_settings {
+    app_setting_names = ["PGUSER"]
+  }
+
   identity {
     type = "SystemAssigned"
   }
@@ -106,7 +110,10 @@ resource "azurerm_linux_web_app_slot" "staging" {
   public_network_access_enabled = true
   virtual_network_subnet_id     = var.app_integration_subnet_id
   client_affinity_enabled       = false
-  app_settings                  = local.app_settings
+  # Each slot has its own managed identity. Verify the principal name in Entra ID before you create the PostgreSQL role.
+  app_settings = merge(local.app_settings, {
+    PGUSER = "${var.name}/slots/staging"
+  })
 
   identity {
     type = "SystemAssigned"

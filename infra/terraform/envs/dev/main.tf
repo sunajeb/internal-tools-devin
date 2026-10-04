@@ -1,22 +1,37 @@
 locals {
+  environment = "dev"
+  settings = {
+    postgres_sku             = "B_Standard_B2s"
+    postgres_ha_enabled      = false
+    web_zone_balancing       = false
+    web_worker_count         = 1
+    worker_zone_balancing    = false
+    worker_worker_count      = 1
+    acr_zone_redundancy      = false
+    storage_replication      = "ZRS"
+    worm_retention_days      = 1
+    worm_locked              = false
+    log_retention_days       = 30
+    waf_rate_limit_threshold = 300
+  }
   env_octet = {
     dev     = "10"
     staging = "20"
     prod    = "30"
-  }[var.environment]
+  }[local.environment]
 
-  base_name                = "${var.project}-${var.environment}-${var.unique_suffix}"
+  base_name                = "${var.project}-${local.environment}-${var.unique_suffix}"
   resource_group           = "${local.base_name}-rg"
   key_vault_name           = "${local.base_name}-kv"
-  registry_name            = "${var.project}${var.environment}${var.unique_suffix}"
-  storage_name             = "${var.project}${var.environment}${var.unique_suffix}sa"
+  registry_name            = "${var.project}${local.environment}${var.unique_suffix}"
+  storage_name             = "${var.project}${local.environment}${var.unique_suffix}sa"
   web_app_name             = "${local.base_name}-web"
   worker_app_name          = "${local.base_name}-worker"
   postgres_name            = "${local.base_name}-pg"
   front_door_name          = "${local.base_name}-fd"
   front_door_endpoint_name = "${local.base_name}-fd"
   tags = {
-    env         = var.environment
+    env         = local.environment
     owner       = var.owner
     data_class  = var.data_class
     cost_center = var.cost_center
@@ -47,7 +62,7 @@ module "monitoring" {
   name                = local.base_name
   resource_group_name = azurerm_resource_group.main.name
   location            = var.location
-  retention_days      = 90
+  retention_days      = local.settings.log_retention_days
   alert_email         = var.alert_email
   alert_short_name    = var.alert_short_name
   tags                = local.tags
@@ -58,7 +73,7 @@ module "registry" {
   name                       = local.registry_name
   resource_group_name        = azurerm_resource_group.main.name
   location                   = var.location
-  zone_redundancy_enabled    = var.environment == "prod"
+  zone_redundancy_enabled    = local.settings.acr_zone_redundancy
   log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
   tags                       = local.tags
 }
@@ -69,6 +84,7 @@ module "front_door" {
   endpoint_name              = local.front_door_endpoint_name
   resource_group_name        = azurerm_resource_group.main.name
   web_default_hostname       = module.app_service.default_hostname
+  rate_limit_threshold       = local.settings.waf_rate_limit_threshold
   log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
   tags                       = local.tags
 }
@@ -79,8 +95,8 @@ module "app_service" {
   resource_group_name                    = azurerm_resource_group.main.name
   location                               = var.location
   plan_sku                               = "P1v3"
-  zone_balancing_enabled                 = var.environment == "prod"
-  worker_count                           = var.environment == "prod" ? 3 : 1
+  zone_balancing_enabled                 = local.settings.web_zone_balancing
+  worker_count                           = local.settings.web_worker_count
   app_integration_subnet_id              = module.network.app_integration_subnet_id
   acr_id                                 = module.registry.id
   acr_login_server                       = module.registry.login_server
@@ -110,12 +126,10 @@ module "worker" {
   websites_port                          = var.websites_port
   postgres_fqdn                          = module.postgres.fqdn
   postgres_database_name                 = module.postgres.database_name
-  key_vault_name                         = local.key_vault_name
-  oidc_client_id                         = module.identity.client_id
-  oidc_issuer                            = module.identity.issuer_url
   application_insights_connection_string = module.monitoring.application_insights_connection_string
   log_analytics_workspace_id             = module.monitoring.log_analytics_workspace_id
-  zone_balancing_enabled                 = var.environment == "prod"
+  zone_balancing_enabled                 = local.settings.worker_zone_balancing
+  worker_count                           = local.settings.worker_worker_count
   tags                                   = local.tags
 }
 
@@ -127,9 +141,9 @@ module "postgres" {
   delegated_subnet_id        = module.network.postgres_subnet_id
   private_dns_zone_id        = module.network.postgres_dns_zone_id
   private_dns_zone_link_id   = module.network.postgres_dns_zone_link_id
-  sku_name                   = var.environment == "dev" ? "B_Standard_B2s" : "GP_Standard_D2ds_v5"
+  sku_name                   = local.settings.postgres_sku
   storage_mb                 = var.postgres_storage_mb
-  high_availability_enabled  = var.environment == "prod"
+  high_availability_enabled  = local.settings.postgres_ha_enabled
   password_auth_enabled      = false
   tenant_id                  = var.tenant_id
   entra_admin_object_id      = var.entra_admin_object_id
@@ -159,9 +173,9 @@ module "storage_worm" {
   name                        = local.storage_name
   resource_group_name         = azurerm_resource_group.main.name
   location                    = var.location
-  replication_type            = var.environment == "prod" ? "GZRS" : "ZRS"
-  retention_days              = var.environment == "prod" ? 2555 : var.environment == "staging" ? 7 : 1
-  immutability_locked         = var.environment == "prod"
+  replication_type            = local.settings.storage_replication
+  retention_days              = local.settings.worm_retention_days
+  immutability_locked         = local.settings.worm_locked
   private_endpoints_subnet_id = module.network.private_endpoints_subnet_id
   private_dns_zone_id         = module.network.blob_dns_zone_id
   log_analytics_workspace_id  = module.monitoring.log_analytics_workspace_id
