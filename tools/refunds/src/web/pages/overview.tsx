@@ -15,6 +15,7 @@ import { ApprovalsPreview } from '../components/approvals-preview.js';
 import { PageHeader, Stat } from '../components/common.js';
 import { RefundTable } from '../components/refund-table.js';
 import { canOpenPage } from '../navigation.js';
+import { can } from '../permissions.js';
 import type { User } from '../types.js';
 import { useDashboard } from '../hooks.js';
 
@@ -40,7 +41,7 @@ export function Overview({ user }: { user: User }) {
     dashboard?.states.find((item) => item.status === 'succeeded')?.count ?? 0;
   const statValue = (value: number | undefined) =>
     dashboard ? String(value ?? 0) : '—';
-  const action = user.roles.includes('platform_admin') ? (
+  const action = can(user, 'execution.pause') ? (
     <button
       className="secondary-btn"
       onClick={() => pause.mutate(!dashboard?.executionPaused)}
@@ -118,18 +119,20 @@ export function Overview({ user }: { user: User }) {
         />
       </div>
       <div className="content-grid">
-        <section className="panel overview-panel">
-          <div className="panel-head">
-            <div>
-              <h2>Recent refund activity</h2>
-              <p>Latest requests and payment events</p>
+        {can(user, 'refund.read') && (
+          <section className="panel overview-panel">
+            <div className="panel-head">
+              <div>
+                <h2>Recent refund activity</h2>
+                <p>Latest requests and payment events</p>
+              </div>
+              <Link className="text-link" to="/refunds">
+                View all refunds <ArrowUpRight size={14} aria-hidden />
+              </Link>
             </div>
-            <Link className="text-link" to="/refunds">
-              View all refunds <ArrowUpRight size={14} aria-hidden />
-            </Link>
-          </div>
-          <RefundTable compact />
-        </section>
+            <RefundTable compact />
+          </section>
+        )}
         <section className="panel side-summary">
           <div className="panel-head">
             <div>
@@ -147,9 +150,7 @@ export function Overview({ user }: { user: User }) {
               </Link>
             )}
           </div>
-          {user.roles.some((role) =>
-            ['supervisor', 'finance'].includes(role),
-          ) && <ApprovalsPreview />}
+          {can(user, 'refund.approve') && <ApprovalsPreview />}
           <div className="summary-divider" />
           <div className="policy-callout">
             <div className="policy-icon" aria-hidden="true">

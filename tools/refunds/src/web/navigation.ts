@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   WalletCards,
 } from 'lucide-react';
+import { refundsPermissions } from '../permissions.js';
 import type { User } from './types.js';
 
 export const refundsNavigation = [
@@ -13,37 +14,37 @@ export const refundsNavigation = [
     to: '/',
     label: 'Overview',
     icon: LayoutDashboard,
-    roles: ['agent', 'supervisor', 'finance', 'auditor', 'platform_admin'],
+    roles: refundsPermissions['dashboard.read'],
   },
   {
     to: '/payments',
     label: 'Payments',
     icon: CreditCard,
-    roles: ['agent', 'supervisor', 'finance', 'auditor'],
+    roles: refundsPermissions['charge.search'],
   },
   {
     to: '/refunds',
     label: 'Refunds',
     icon: WalletCards,
-    roles: ['agent', 'supervisor', 'finance', 'auditor'],
+    roles: refundsPermissions['refund.read'],
   },
   {
     to: '/approvals',
     label: 'Approvals',
     icon: BookOpenCheck,
-    roles: ['supervisor', 'finance'],
+    roles: refundsPermissions['refund.approve'],
   },
   {
     to: '/exceptions',
     label: 'Reconciliation',
     icon: Activity,
-    roles: ['finance'],
+    roles: refundsPermissions['exception.resolve'],
   },
   {
     to: '/audit',
     label: 'Audit & controls',
     icon: Fingerprint,
-    roles: ['auditor', 'platform_admin'],
+    roles: refundsPermissions['audit.read'],
   },
 ];
 

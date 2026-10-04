@@ -17,6 +17,7 @@ import {
 import { humanizeKey, formatDetail } from '../formatting.js';
 import type { User, Message } from '../types.js';
 import { useExceptions } from '../hooks.js';
+import { can } from '../permissions.js';
 
 export function Exceptions({ user }: { user: User }) {
   const client = useQueryClient();
@@ -69,7 +70,7 @@ export function Exceptions({ user }: { user: User }) {
         title="Reconciliation"
         detail="Compare internal refund records with provider records. Resolve differences with an audited reason."
         action={
-          user.roles.includes('finance') ? (
+          can(user, 'exception.resolve') ? (
             <button
               className="secondary-btn"
               onClick={() => run.mutate()}
@@ -120,7 +121,7 @@ export function Exceptions({ user }: { user: User }) {
               ))}
             </dl>
             <span className="date-cell">{dateTime(item.created_at)}</span>
-            {user.roles.includes('finance') && (
+            {can(user, 'exception.resolve') && (
               <button
                 type="button"
                 className="secondary-btn compact-btn"

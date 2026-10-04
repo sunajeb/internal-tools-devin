@@ -12,6 +12,7 @@ import {
 import { Detail, CloseButton, StatusBadge } from './common.js';
 import type { User, Charge } from '../types.js';
 import { useCharge } from '../hooks.js';
+import { can } from '../permissions.js';
 
 export function ChargeDialog({
   chargeId,
@@ -30,6 +31,7 @@ export function ChargeDialog({
   const [revealAttempted, setRevealAttempted] = useState(false);
   const revealButtonRef = useRef<HTMLButtonElement>(null);
   const reasonRef = useRef<HTMLTextAreaElement>(null);
+  const canRequest = can(user, 'refund.request');
   const titleId = useId();
   const revealFormId = useId();
   const reasonId = useId();
@@ -107,9 +109,7 @@ export function ChargeDialog({
         <div className="detail-row">
           <span>Email</span>
           <b>{revealedEmail ?? charge.customer_email}</b>
-          {user.roles.some((role) =>
-            ['supervisor', 'finance', 'auditor'].includes(role),
-          ) && (
+          {can(user, 'customer.reveal') && (
             <button
               ref={revealButtonRef}
               type="button"
@@ -211,7 +211,7 @@ export function ChargeDialog({
           No refunds have been requested for this payment.
         </p>
       )}
-      {BigInt(charge.refundable_minor ?? '0') <= 0n && (
+      {canRequest && BigInt(charge.refundable_minor ?? '0') <= 0n && (
         <p className="field-hint">
           This payment has no refundable balance. You cannot request a refund.
         </p>
@@ -220,14 +220,16 @@ export function ChargeDialog({
         <button type="button" className="secondary-btn" onClick={onClose}>
           Close
         </button>
-        <button
-          type="button"
-          className="primary-btn"
-          onClick={() => onRequest(charge)}
-          disabled={BigInt(charge.refundable_minor ?? '0') <= 0n}
-        >
-          Request refund <ArrowDownLeft size={16} aria-hidden />
-        </button>
+        {canRequest && (
+          <button
+            type="button"
+            className="primary-btn"
+            onClick={() => onRequest(charge)}
+            disabled={BigInt(charge.refundable_minor ?? '0') <= 0n}
+          >
+            Request refund <ArrowDownLeft size={16} aria-hidden />
+          </button>
+        )}
       </div>
     </Dialog>
   );

@@ -6,6 +6,7 @@ import { RefundTable } from '../components/refund-table.js';
 import { RefundTimelineDialog } from '../components/refund-timeline-dialog.js';
 import type { User } from '../types.js';
 import { useRefunds } from '../hooks.js';
+import { can } from '../permissions.js';
 
 export function Refunds({ user }: { user: User }) {
   const [filter, setFilter] = useState('all');
@@ -25,7 +26,7 @@ export function Refunds({ user }: { user: User }) {
         title="Refunds"
         detail="Review refund requests, monitor execution, and open a complete audit timeline."
         action={
-          user.roles.some((role) => ['finance', 'auditor'].includes(role)) ? (
+          can(user, 'refund.export') ? (
             <a className="secondary-btn" href="/api/refunds?format=csv">
               <ArrowDownLeft size={15} aria-hidden /> Export CSV
             </a>
