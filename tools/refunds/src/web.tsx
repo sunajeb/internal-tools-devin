@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   Link,
   Navigate,
   Route,
   Routes,
+  useNavigate,
   useSearchParams,
 } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -27,7 +28,16 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
-import { api, dateTime, money } from '@internal-tools/ui-kit';
+import {
+  api,
+  dateTime,
+  decimalToMinor,
+  Dialog,
+  ErrorState,
+  LoadingState,
+  minorToDecimal,
+  money,
+} from '@internal-tools/ui-kit';
 
 export type User = { id: string; displayName: string; roles: string[] };
 type Charge = {
@@ -204,7 +214,12 @@ function PageHeader({
 
 function Overview({ user }: { user: User }) {
   const client = useQueryClient();
-  const { data: dashboard } = useQuery({
+  const {
+    data: dashboard,
+    isLoading: dashboardLoading,
+    error: dashboardError,
+    refetch: refetchDashboard,
+  } = useQuery({
     queryKey: ['dashboard'],
     queryFn: () =>
       api<{
@@ -226,14 +241,20 @@ function Overview({ user }: { user: User }) {
     dashboard?.states.reduce((sum, item) => sum + item.count, 0) ?? 0;
   const success =
     dashboard?.states.find((item) => item.status === 'succeeded')?.count ?? 0;
+  const statValue = (value: number | undefined) =>
+    dashboard ? String(value ?? 0) : '—';
   const action = user.roles.includes('platform_admin') ? (
     <button
       className="secondary-btn"
       onClick={() => pause.mutate(!dashboard?.executionPaused)}
       disabled={pause.isPending}
     >
-      <Pause size={15} />
-      {dashboard?.executionPaused ? 'Resume execution' : 'Pause execution'}
+      <Pause size={15} aria-hidden />
+      {pause.isPending
+        ? 'Saving…'
+        : dashboard?.executionPaused
+          ? 'Resume execution'
+          : 'Pause execution'}
     </button>
   ) : undefined;
   return (
@@ -244,9 +265,22 @@ function Overview({ user }: { user: User }) {
         detail="Here is your payments operations snapshot for today."
         action={action}
       />
+      {pause.error && (
+        <div className="notice notice-warn" role="alert">
+          <XCircle size={16} aria-hidden />
+          The execution state did not change. {pause.error.message}
+        </div>
+      )}
+      {dashboardError && (
+        <ErrorState
+          title="The dashboard figures are not available"
+          error={dashboardError}
+          onRetry={() => void refetchDashboard()}
+        />
+      )}
       {dashboard?.executionPaused && (
-        <div className="alert-banner">
-          <Pause size={17} />
+        <div className="alert-banner" role="status">
+          <Pause size={17} aria-hidden />
           <div>
             <b>Refund execution is paused</b>
             <span>
@@ -256,32 +290,32 @@ function Overview({ user }: { user: User }) {
           </div>
         </div>
       )}
-      <div className="stat-grid">
+      <div className="stat-grid" aria-busy={dashboardLoading}>
         <Stat
           icon={<WalletCards />}
           label="Total refunds"
-          value={String(total)}
+          value={dashboard ? String(total) : '—'}
           delta="Across all statuses"
           tone="blue"
         />
         <Stat
           icon={<Clock3 />}
           label="Awaiting approval"
-          value={String(dashboard?.pendingApprovals ?? 0)}
+          value={statValue(dashboard?.pendingApprovals)}
           delta="Needs reviewer attention"
           tone="amber"
         />
         <Stat
           icon={<BadgeCheck />}
           label="Successfully refunded"
-          value={String(success)}
+          value={dashboard ? String(success) : '—'}
           delta="Provider confirmed"
           tone="green"
         />
         <Stat
           icon={<Activity />}
           label="Open exceptions"
-          value={String(dashboard?.openExceptions ?? 0)}
+          value={statValue(dashboard?.openExceptions)}
           delta="Reconciliation queue"
           tone="purple"
         />
@@ -294,7 +328,7 @@ function Overview({ user }: { user: User }) {
               <p>Latest requests and payment events</p>
             </div>
             <Link className="text-link" to="/refunds">
-              View all <ArrowUpRight size={14} />
+              View all refunds <ArrowUpRight size={14} aria-hidden />
             </Link>
           </div>
           <RefundTable compact />
@@ -305,8 +339,13 @@ function Overview({ user }: { user: User }) {
               <h2>Approval queue</h2>
               <p>Across your permitted roles</p>
             </div>
-            <Link className="round-link" to="/approvals">
-              <ArrowUpRight size={15} />
+            <Link
+              className="round-link"
+              to="/approvals"
+              aria-label="Open approval inbox"
+              title="Open approval inbox"
+            >
+              <ArrowUpRight size={15} aria-hidden />
             </Link>
           </div>
           {user.roles.some((role) =>
@@ -314,22 +353,22 @@ function Overview({ user }: { user: User }) {
           ) && <ApprovalsPreview />}
           <div className="summary-divider" />
           <div className="policy-callout">
-            <div className="policy-icon">
+            <div className="policy-icon" aria-hidden="true">
               <ShieldCheck size={18} />
             </div>
             <div>
               <b>Approval policy active</b>
               <p>Thresholds are versioned and dual-controlled.</p>
               <span className="policy-version">
-                <span /> POLICY V1 · ACTIVE
+                <span aria-hidden="true" /> POLICY V1 · ACTIVE
               </span>
             </div>
           </div>
         </section>
       </div>
       <footer className="page-footer">
-        <ShieldCheck size={14} /> Every action is permission-checked and added
-        to the tamper-evident audit trail.
+        <ShieldCheck size={14} aria-hidden /> Every action is permission-checked
+        and added to the tamper-evident audit trail.
       </footer>
     </div>
   );
@@ -350,7 +389,9 @@ function Stat({
 }) {
   return (
     <div className="stat-card">
-      <div className={`stat-icon ${tone}`}>{icon}</div>
+      <div className={`stat-icon ${tone}`} aria-hidden="true">
+        {icon}
+      </div>
       <div className="stat-label">{label}</div>
       <div className="stat-value">{value}</div>
       <div className="stat-delta">{delta}</div>
@@ -368,9 +409,14 @@ function Payments({ user }: { user: User }) {
   const [cursor, setCursor] = useState<string>();
   const [selected, setSelected] = useState<Charge | null>(null);
   const [requestCharge, setRequestCharge] = useState<Charge | null>(null);
-  const minMinor = decimalToMinor(minAmount);
-  const maxMinor = decimalToMinor(maxAmount);
-  const { data, isFetching } = useQuery({
+  const filterPanelId = useId();
+  const minMinor = decimalToMinor(minAmount) ?? '';
+  const maxMinor = decimalToMinor(maxAmount) ?? '';
+  const amountFilterInvalid =
+    (minAmount !== '' && !minMinor) || (maxAmount !== '' && !maxMinor);
+  const amountRangeInvalid =
+    Boolean(minMinor && maxMinor) && BigInt(minMinor) > BigInt(maxMinor);
+  const { data, isFetching, isLoading, error, refetch } = useQuery({
     queryKey: ['charges', query, from, to, minMinor, maxMinor, cursor],
     queryFn: () => {
       const params = new URLSearchParams();
@@ -395,7 +441,7 @@ function Payments({ user }: { user: User }) {
       <section className="panel table-panel">
         <div className="toolbar">
           <label className="searchbox">
-            <Search size={17} />
+            <Search size={17} aria-hidden />
             <input
               aria-label="Search payments"
               placeholder="Search charge, customer, email or last 4…"
@@ -405,21 +451,26 @@ function Payments({ user }: { user: User }) {
                 setCursor(undefined);
               }}
             />
-            <kbd>⌘ K</kbd>
           </label>
           <button
             className="secondary-btn"
+            type="button"
             aria-expanded={filtersOpen}
+            aria-controls={filterPanelId}
             onClick={() => setFiltersOpen((open) => !open)}
           >
-            <SlidersHorizontal size={15} /> Filters
+            <SlidersHorizontal size={15} aria-hidden /> Filters
           </button>
-          <span className="result-count">
-            {isFetching ? 'Searching…' : `${data?.items.length ?? 0} records`}
+          <span className="result-count" role="status">
+            {isFetching
+              ? 'Searching…'
+              : error
+                ? 'Search failed'
+                : `${data?.items.length ?? 0} records`}
           </span>
         </div>
         {filtersOpen && (
-          <div className="filter-panel">
+          <div className="filter-panel" id={filterPanelId}>
             <label>
               From
               <input
@@ -445,10 +496,12 @@ function Payments({ user }: { user: User }) {
             <label>
               Minimum amount
               <input
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="$0.00"
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="0.00"
+                aria-invalid={amountFilterInvalid || amountRangeInvalid}
+                aria-describedby={`${filterPanelId}-hint`}
                 value={minAmount}
                 onChange={(event) => {
                   setMinAmount(event.target.value);
@@ -459,10 +512,12 @@ function Payments({ user }: { user: User }) {
             <label>
               Maximum amount
               <input
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="$0.00"
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="0.00"
+                aria-invalid={amountFilterInvalid || amountRangeInvalid}
+                aria-describedby={`${filterPanelId}-hint`}
                 value={maxAmount}
                 onChange={(event) => {
                   setMaxAmount(event.target.value);
@@ -470,7 +525,25 @@ function Payments({ user }: { user: User }) {
                 }}
               />
             </label>
+            <p
+              className={
+                amountFilterInvalid || amountRangeInvalid
+                  ? 'field-error'
+                  : 'field-hint'
+              }
+              id={`${filterPanelId}-hint`}
+              role={
+                amountFilterInvalid || amountRangeInvalid ? 'alert' : undefined
+              }
+            >
+              {amountFilterInvalid
+                ? 'Enter amounts as numbers with up to two decimals, for example 25.50. The filter ignores other values.'
+                : amountRangeInvalid
+                  ? 'The minimum amount is more than the maximum amount.'
+                  : 'Amounts use the payment currency, for example 25.50.'}
+            </p>
             <button
+              type="button"
               className="secondary-btn compact-btn"
               onClick={() => {
                 setFrom('');
@@ -484,7 +557,13 @@ function Payments({ user }: { user: User }) {
             </button>
           </div>
         )}
-        <ChargeTable charges={data?.items ?? []} onSelect={setSelected} />
+        <ChargeTable
+          charges={data?.items ?? []}
+          onSelect={setSelected}
+          loading={isLoading}
+          error={error}
+          onRetry={() => void refetch()}
+        />
         <div className="pagination">
           <span>
             {cursor
@@ -493,6 +572,7 @@ function Payments({ user }: { user: User }) {
           </span>
           {cursor && (
             <button
+              type="button"
               className="secondary-btn compact-btn"
               onClick={() => setCursor(undefined)}
             >
@@ -501,11 +581,12 @@ function Payments({ user }: { user: User }) {
           )}
           {data?.nextCursor && (
             <button
+              type="button"
               className="secondary-btn compact-btn"
               disabled={isFetching}
               onClick={() => setCursor(data.nextCursor!)}
             >
-              Next page <ArrowUpRight size={13} />
+              Next page <ArrowUpRight size={13} aria-hidden />
             </button>
           )}
         </div>
@@ -531,25 +612,56 @@ function Payments({ user }: { user: User }) {
   );
 }
 
-function decimalToMinor(value: string): string {
-  if (!/^\d+(\.\d{0,2})?$/.test(value)) return '';
-  const [dollars = '0', cents = ''] = value.split('.');
+function TableStatusRow({
+  colSpan,
+  loading,
+  error,
+  onRetry,
+  label,
+  children,
+}: {
+  colSpan: number;
+  loading?: boolean;
+  error?: unknown;
+  onRetry?: () => void;
+  label: string;
+  children: ReactNode;
+}) {
   return (
-    BigInt(dollars || '0') * 100n +
-    BigInt((cents + '00').slice(0, 2))
-  ).toString();
+    <tr>
+      <td colSpan={colSpan}>
+        {error ? (
+          <ErrorState
+            title={`The ${label} are not available`}
+            error={error}
+            onRetry={onRetry}
+          />
+        ) : loading ? (
+          <LoadingState label={`Loading ${label}`} />
+        ) : (
+          children
+        )}
+      </td>
+    </tr>
+  );
 }
 
 function ChargeTable({
   charges,
   onSelect,
+  loading,
+  error,
+  onRetry,
 }: {
   charges: Charge[];
   onSelect: (charge: Charge) => void;
+  loading?: boolean;
+  error?: unknown;
+  onRetry?: () => void;
 }) {
   return (
     <div className="table-scroll">
-      <table>
+      <table aria-label="Payments">
         <thead>
           <tr>
             <th>PAYMENT</th>
@@ -565,18 +677,20 @@ function ChargeTable({
             <tr
               key={charge.id}
               onClick={() => onSelect(charge)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  onSelect(charge);
-                }
-              }}
-              tabIndex={0}
-              aria-label={`Open payment ${charge.id}`}
               className="clickable-row"
             >
               <td>
-                <span className="mono-id">{charge.id}</span>
+                <button
+                  type="button"
+                  className="row-link mono-id"
+                  aria-label={`Open payment ${charge.id}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSelect(charge);
+                  }}
+                >
+                  {charge.id}
+                </button>
                 <small className="subline">
                   {charge.card_brand.toUpperCase()} ···· {charge.card_last4}
                 </small>
@@ -601,16 +715,20 @@ function ChargeTable({
               <td className="date-cell">{dateTime(charge.created_at)}</td>
             </tr>
           ))}
-          {!charges.length && (
-            <tr>
-              <td colSpan={6}>
-                <EmptyState
-                  icon={<Search />}
-                  title="No payments found"
-                  detail="Try another payment, customer, email, or card number."
-                />
-              </td>
-            </tr>
+          {(!charges.length || Boolean(error)) && (
+            <TableStatusRow
+              colSpan={6}
+              loading={loading}
+              error={error}
+              onRetry={onRetry}
+              label="payments"
+            >
+              <EmptyState
+                icon={<Search />}
+                title="No payments found"
+                detail="Try another payment, customer, email, or card number."
+              />
+            </TableStatusRow>
           )}
         </tbody>
       </table>
@@ -630,7 +748,13 @@ function ChargeDialog({
   onRequest: (charge: Charge) => void;
 }) {
   const [revealedEmail, setRevealedEmail] = useState<string>();
-  const { data: charge, isLoading } = useQuery({
+  const titleId = useId();
+  const {
+    data: charge,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ['charge', chargeId],
     queryFn: () => api<Charge>(`/api/charges/${chargeId}`),
   });
@@ -644,23 +768,33 @@ function ChargeDialog({
   });
   if (isLoading || !charge)
     return (
-      <Modal onClose={onClose}>
-        <div className="loading">
-          <span className="loader" />
-          Loading payment
+      <Dialog onClose={onClose} label="Payment detail">
+        <div className="modal-head">
+          <div>
+            <p className="eyebrow">PAYMENT DETAIL</p>
+            <h2>{chargeId}</h2>
+          </div>
+          <CloseButton onClose={onClose} />
         </div>
-      </Modal>
+        {error ? (
+          <ErrorState
+            title="The payment is not available"
+            error={error}
+            onRetry={() => void refetch()}
+          />
+        ) : (
+          <LoadingState label="Loading payment" />
+        )}
+      </Dialog>
     );
   return (
-    <Modal onClose={onClose}>
+    <Dialog onClose={onClose} labelledBy={titleId}>
       <div className="modal-head">
         <div>
           <p className="eyebrow">PAYMENT DETAIL</p>
-          <h2>{charge.id}</h2>
+          <h2 id={titleId}>{charge.id}</h2>
         </div>
-        <button className="icon-btn" onClick={onClose} aria-label="Close">
-          <X size={18} />
-        </button>
+        <CloseButton onClose={onClose} />
       </div>
       <div className="detail-highlight">
         <div>
@@ -683,7 +817,9 @@ function ChargeDialog({
             ['supervisor', 'finance', 'auditor'].includes(role),
           ) && (
             <button
+              type="button"
               className="reveal-btn"
+              aria-label={revealedEmail ? 'Email revealed' : 'Reveal email'}
               onClick={() => reveal.mutate()}
               disabled={reveal.isPending || Boolean(revealedEmail)}
             >
@@ -695,6 +831,11 @@ function ChargeDialog({
             </button>
           )}
         </div>
+        {reveal.error && (
+          <p className="field-error" role="alert">
+            The email was not revealed. {reveal.error.message}
+          </p>
+        )}
         <Detail
           label="Card"
           value={`${charge.card_brand.toUpperCase()} ending ${charge.card_last4}`}
@@ -703,10 +844,10 @@ function ChargeDialog({
       </div>
       <h3 className="section-subtitle">Refund history</h3>
       {(charge.refunds ?? []).length ? (
-        <div className="mini-list">
+        <ul className="mini-list" aria-label="Refund history">
           {charge.refunds?.map((refund) => (
-            <div key={refund.id}>
-              <span className="timeline-dot" />
+            <li key={refund.id}>
+              <span className="timeline-dot" aria-hidden="true" />
               <div>
                 <b>
                   {money(refund.amount_minor, refund.currency)} ·{' '}
@@ -715,27 +856,54 @@ function ChargeDialog({
                 <small>{dateTime(refund.created_at)}</small>
               </div>
               <StatusBadge status={refund.status} />
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       ) : (
         <p className="empty-inline">
           No refunds have been requested for this payment.
         </p>
       )}
+      {BigInt(charge.refundable_minor ?? '0') <= 0n && (
+        <p className="field-hint">
+          This payment has no refundable balance. You cannot request a refund.
+        </p>
+      )}
       <div className="modal-actions">
-        <button className="secondary-btn" onClick={onClose}>
+        <button type="button" className="secondary-btn" onClick={onClose}>
           Close
         </button>
         <button
+          type="button"
           className="primary-btn"
           onClick={() => onRequest(charge)}
-          disabled={Number(charge.refundable_minor) <= 0}
+          disabled={BigInt(charge.refundable_minor ?? '0') <= 0n}
         >
-          Request refund <ArrowDownLeft size={16} />
+          Request refund <ArrowDownLeft size={16} aria-hidden />
         </button>
       </div>
-    </Modal>
+    </Dialog>
+  );
+}
+
+function CloseButton({ onClose }: { onClose: () => void }) {
+  return (
+    <button
+      type="button"
+      className="icon-btn"
+      onClick={onClose}
+      aria-label="Close dialog"
+    >
+      <X size={18} aria-hidden />
+    </button>
+  );
+}
+
+function currencySymbol(currency: string) {
+  return (
+    new Intl.NumberFormat('en-US', { style: 'currency', currency })
+      .formatToParts(0)
+      .find((part) => part.type === 'currency')?.value ?? currency
   );
 }
 
@@ -747,15 +915,39 @@ function RefundDialog({
   onClose: () => void;
 }) {
   const client = useQueryClient();
-  const [amount, setAmount] = useState(
+  const currency = charge.currency.toUpperCase();
+  const refundableMinor =
     charge.refundable_minor ??
-      String(Number(charge.amount_minor) - Number(charge.refunded_minor)),
+    String(BigInt(charge.amount_minor) - BigInt(charge.refunded_minor));
+  const [amountText, setAmountText] = useState(() =>
+    minorToDecimal(refundableMinor, currency),
   );
   const [reason, setReason] = useState('service_issue');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [idempotencyKey] = useState(() => crypto.randomUUID());
-  const amountMinor = BigInt(amount || '0');
+  const titleId = useId();
+  const amountRef = useRef<HTMLInputElement>(null);
+  const noteRef = useRef<HTMLTextAreaElement>(null);
+  const parsedMinor = decimalToMinor(amountText, currency);
+  const amountMinor = parsedMinor === undefined ? 0n : BigInt(parsedMinor);
+  const amountError =
+    parsedMinor === undefined
+      ? `Enter an amount in ${currency}, for example ${minorToDecimal(2500, currency)}.`
+      : amountMinor <= 0n
+        ? 'Enter an amount that is more than zero.'
+        : amountMinor > BigInt(refundableMinor)
+          ? `The amount is more than the available balance of ${money(refundableMinor, currency)}.`
+          : '';
+  const noteError =
+    note.trim().length < 10
+      ? `Enter a note of 10 or more characters. The note has ${note.trim().length}.`
+      : '';
+  const showAmountError = Boolean(
+    amountError && (submitAttempted || amountText !== ''),
+  );
+  const showNoteError = Boolean(noteError && submitAttempted);
   const tier =
     amountMinor <= 25_000n
       ? 'Instant refund'
@@ -781,65 +973,71 @@ function RefundDialog({
     onError: (caught: Error) => setError(caught.message),
   });
   return (
-    <Modal onClose={onClose}>
+    <Dialog onClose={onClose} labelledBy={titleId}>
       <div className="modal-head">
         <div>
           <p className="eyebrow">NEW REFUND REQUEST</p>
-          <h2>Refund payment</h2>
+          <h2 id={titleId}>Refund payment</h2>
           <p className="modal-subtitle">
             {charge.id} · {money(charge.amount_minor, charge.currency)} original
             payment
           </p>
         </div>
-        <button className="icon-btn" onClick={onClose} aria-label="Close">
-          <X size={18} />
-        </button>
+        <CloseButton onClose={onClose} />
       </div>
       <form
+        noValidate
         onSubmit={(event) => {
           event.preventDefault();
+          setSubmitAttempted(true);
+          if (amountError) {
+            amountRef.current?.focus();
+            return;
+          }
+          if (noteError) {
+            noteRef.current?.focus();
+            return;
+          }
           mutation.mutate();
         }}
       >
         <label className="field-label" htmlFor="refund-amount">
-          Refund amount <span>USD</span>
+          Refund amount <span>{currency}</span>
         </label>
         <div className="money-input">
-          <span>$</span>
+          <span aria-hidden="true">{currencySymbol(currency)}</span>
           <input
+            ref={amountRef}
             id="refund-amount"
-            type="number"
-            min="0.01"
-            max={(Number(charge.refundable_minor ?? 0) / 100).toFixed(2)}
-            step="0.01"
-            value={
-              amount
-                ? `${BigInt(amount) / 100n}.${String(BigInt(amount) % 100n).padStart(2, '0')}`
-                : ''
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            data-autofocus
+            value={amountText}
+            onChange={(event) => setAmountText(event.target.value)}
+            aria-invalid={showAmountError}
+            aria-describedby={
+              showAmountError
+                ? 'refund-amount-error refund-amount-balance'
+                : 'refund-amount-balance'
             }
-            onChange={(event) => {
-              const value = event.target.value;
-              const [whole = '0', fraction = ''] = value.split('.');
-              setAmount(
-                /^\d+$/.test(whole) && /^\d{0,2}$/.test(fraction)
-                  ? (
-                      BigInt(whole) * 100n +
-                      BigInt((fraction + '00').slice(0, 2))
-                    ).toString()
-                  : '0',
-              );
-            }}
             required
           />
         </div>
-        <div className="balance-hint">
-          Available to refund:{' '}
-          <b>{money(charge.refundable_minor ?? '0', charge.currency)}</b>
+        {showAmountError && (
+          <p className="field-error" id="refund-amount-error">
+            {amountError}
+          </p>
+        )}
+        <div className="balance-hint" id="refund-amount-balance">
+          Available to refund: <b>{money(refundableMinor, charge.currency)}</b>
           <button
             type="button"
-            onClick={() => setAmount(charge.refundable_minor ?? '0')}
+            onClick={() =>
+              setAmountText(minorToDecimal(refundableMinor, currency))
+            }
           >
-            Full balance
+            Use full balance
           </button>
         </div>
         <label className="field-label" htmlFor="reason">
@@ -857,19 +1055,30 @@ function RefundDialog({
           <option value="other">Other</option>
         </select>
         <label className="field-label" htmlFor="note">
-          Internal note <span>{note.length}/1,000</span>
+          Internal note <span aria-hidden="true">{note.length}/1,000</span>
         </label>
         <textarea
+          ref={noteRef}
           id="note"
           minLength={10}
           maxLength={1000}
           value={note}
           onChange={(event) => setNote(event.target.value)}
           placeholder="Add context for reviewers (10–1,000 characters)"
+          aria-invalid={showNoteError}
+          aria-describedby="note-hint"
           required
         />
-        <div className="tier-preview">
-          <div className="tier-shield">
+        <p
+          className={showNoteError ? 'field-error' : 'field-hint'}
+          id="note-hint"
+        >
+          {showNoteError
+            ? noteError
+            : 'Enter 10 to 1,000 characters. Reviewers see this note.'}
+        </p>
+        <div className="tier-preview" aria-live="polite">
+          <div className="tier-shield" aria-hidden="true">
             <ShieldCheck size={18} />
           </div>
           <div>
@@ -884,8 +1093,8 @@ function RefundDialog({
           <span className="tier-policy">POLICY V1</span>
         </div>
         {error && (
-          <div className="form-error">
-            <XCircle size={15} />
+          <div className="form-error" role="alert">
+            <XCircle size={15} aria-hidden />
             {error}
           </div>
         )}
@@ -896,21 +1105,21 @@ function RefundDialog({
           <button
             className="primary-btn"
             type="submit"
-            disabled={mutation.isPending || note.trim().length < 10}
+            disabled={mutation.isPending}
           >
             {mutation.isPending ? 'Submitting…' : 'Submit request'}{' '}
-            <ArrowUpRight size={16} />
+            <ArrowUpRight size={16} aria-hidden />
           </button>
         </div>
       </form>
-    </Modal>
+    </Dialog>
   );
 }
 
 function Refunds({ user }: { user: User }) {
   const [filter, setFilter] = useState('all');
   const [searchParams, setSearchParams] = useSearchParams();
-  const { data } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['refunds'],
     queryFn: () => api<{ items: Refund[] }>('/api/refunds'),
     refetchInterval: 2_000,
@@ -931,17 +1140,18 @@ function Refunds({ user }: { user: User }) {
         action={
           user.roles.some((role) => ['finance', 'auditor'].includes(role)) ? (
             <a className="secondary-btn" href="/api/refunds?format=csv">
-              <ArrowDownLeft size={15} /> Export CSV
+              <ArrowDownLeft size={15} aria-hidden /> Export CSV
             </a>
           ) : undefined
         }
       />
-      <div className="tabs">
+      <div className="tabs" role="group" aria-label="Filter refunds by status">
         {['all', 'pending_approval', 'approved', 'succeeded', 'failed'].map(
           (item) => (
             <button
               key={item}
-              className={filter === item ? 'active' : ''}
+              type="button"
+              aria-pressed={filter === item}
               onClick={() => setFilter(item)}
             >
               {item === 'all' ? 'All refunds' : item.replaceAll('_', ' ')}
@@ -953,6 +1163,9 @@ function Refunds({ user }: { user: User }) {
         <RefundTable
           filter={filter}
           items={items}
+          loading={isLoading}
+          error={error}
+          onRetry={() => void refetch()}
           onSelect={(id) => setSearchParams({ id })}
         />
       </section>
@@ -970,24 +1183,35 @@ function RefundTable({
   compact = false,
   filter = 'all',
   items: passedItems,
+  loading,
+  error,
+  onRetry,
   onSelect,
 }: {
   compact?: boolean;
   filter?: string;
   items?: Refund[];
+  loading?: boolean;
+  error?: unknown;
+  onRetry?: () => void;
   onSelect?: (id: string) => void;
 }) {
-  const { data } = useQuery({
+  const navigate = useNavigate();
+  const own = useQuery({
     queryKey: ['refunds'],
     queryFn: () => api<{ items: Refund[] }>('/api/refunds'),
     enabled: !passedItems,
   });
-  const items = (passedItems ?? data?.items ?? [])
+  const items = (passedItems ?? own.data?.items ?? [])
     .filter((item) => filter === 'all' || item.status === filter)
     .slice(0, compact ? 6 : 100);
+  const open = (id: string) =>
+    onSelect ? onSelect(id) : navigate(`/refunds?id=${encodeURIComponent(id)}`);
+  const tableLoading = passedItems ? loading : own.isLoading;
+  const tableError = passedItems ? error : own.error;
   return (
     <div className="table-scroll">
-      <table>
+      <table aria-label={compact ? 'Recent refunds' : 'Refunds'}>
         <thead>
           <tr>
             <th>REFUND</th>
@@ -1003,23 +1227,20 @@ function RefundTable({
             <tr
               key={item.id}
               className="clickable-row"
-              tabIndex={0}
-              aria-label={`Open refund ${item.id}`}
-              onClick={() =>
-                onSelect
-                  ? onSelect(item.id)
-                  : (window.location.href = `/refunds?id=${item.id}`)
-              }
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  if (onSelect) onSelect(item.id);
-                  else window.location.href = `/refunds?id=${item.id}`;
-                }
-              }}
+              onClick={() => open(item.id)}
             >
               <td>
-                <span className="mono-id">{item.id.slice(0, 8)}…</span>
+                <button
+                  type="button"
+                  className="row-link mono-id"
+                  aria-label={`Open refund ${item.id}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    open(item.id);
+                  }}
+                >
+                  {item.id.slice(0, 8)}…
+                </button>
                 <small className="subline">
                   {item.reason_code.replaceAll('_', ' ')}
                 </small>
@@ -1037,16 +1258,20 @@ function RefundTable({
               <td className="date-cell">{dateTime(item.created_at)}</td>
             </tr>
           ))}
-          {!items.length && (
-            <tr>
-              <td colSpan={6}>
-                <EmptyState
-                  icon={<WalletCards />}
-                  title="No refunds in this view"
-                  detail="New refund requests will appear here."
-                />
-              </td>
-            </tr>
+          {(!items.length || Boolean(tableError)) && (
+            <TableStatusRow
+              colSpan={6}
+              loading={tableLoading}
+              error={tableError}
+              onRetry={onRetry ?? (() => void own.refetch())}
+              label="refunds"
+            >
+              <EmptyState
+                icon={<WalletCards />}
+                title="No refunds in this view"
+                detail="New refund requests will appear here."
+              />
+            </TableStatusRow>
           )}
         </tbody>
       </table>
@@ -1061,26 +1286,28 @@ function RefundTimelineDialog({
   id: string;
   onClose: () => void;
 }) {
-  const { data, isLoading } = useQuery({
+  const titleId = useId();
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['refund', id],
-    queryFn: () => api<Refund>(`/api/refunds/${id}`),
+    queryFn: () => api<Refund>(`/api/refunds/${encodeURIComponent(id)}`),
   });
   return (
-    <Modal onClose={onClose}>
+    <Dialog onClose={onClose} labelledBy={titleId}>
       <div className="modal-head">
         <div>
           <p className="eyebrow">REFUND TIMELINE</p>
-          <h2>{data?.id ?? id}</h2>
+          <h2 id={titleId}>{data?.id ?? id}</h2>
         </div>
-        <button className="icon-btn" onClick={onClose} aria-label="Close">
-          <X size={18} />
-        </button>
+        <CloseButton onClose={onClose} />
       </div>
-      {isLoading || !data ? (
-        <div className="loading">
-          <span className="loader" />
-          Loading refund history
-        </div>
+      {error ? (
+        <ErrorState
+          title="The refund is not available"
+          error={error}
+          onRetry={() => void refetch()}
+        />
+      ) : isLoading || !data ? (
+        <LoadingState label="Loading refund history" />
       ) : (
         <>
           <div className="detail-highlight">
@@ -1104,37 +1331,40 @@ function RefundTimelineDialog({
             />
           </div>
           <h3 className="section-subtitle">Activity</h3>
-          <div className="timeline-list">
+          <ol className="timeline-list" aria-label="Refund activity">
             {(data.timeline ?? []).map((event, index) => (
-              <div className="timeline-event" key={`${event.action}-${index}`}>
-                <span className="timeline-dot" />
+              <li className="timeline-event" key={`${event.action}-${index}`}>
+                <span className="timeline-dot" aria-hidden="true" />
                 <div>
                   <b>{event.action.replaceAll(/[._]/g, ' ')}</b>
                   <small>
                     {event.actorId} · {dateTime(event.occurredAt)}
                   </small>
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
+          </ol>
+          {!data.timeline?.length && (
+            <p className="empty-inline">No activity is recorded yet.</p>
+          )}
         </>
       )}
       <div className="modal-actions">
-        <button className="secondary-btn" onClick={onClose}>
+        <button type="button" className="secondary-btn" onClick={onClose}>
           Close
         </button>
       </div>
-    </Modal>
+    </Dialog>
   );
 }
 
 function Approvals({ user }: { user: User }) {
   const client = useQueryClient();
-  const { data } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['approvals'],
     queryFn: () => api<{ items: Approval[] }>('/api/approvals?tool=refunds'),
   });
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState<Message>();
   const approve = useMutation({
     mutationFn: ({
       id,
@@ -1149,11 +1379,18 @@ function Approvals({ user }: { user: User }) {
         method: 'POST',
         body: JSON.stringify({ stepIndex, decision }),
       }),
-    onSuccess: () => {
-      setMessage('Approval recorded. The request has been updated.');
+    onSuccess: (_result, { decision }) => {
+      setMessage({
+        tone: 'success',
+        text:
+          decision === 'reject'
+            ? 'Decline recorded. The request is closed.'
+            : 'Approval recorded. The request has been updated.',
+      });
       client.invalidateQueries();
     },
-    onError: (error: Error) => setMessage(error.message),
+    onError: (caught: Error) =>
+      setMessage({ tone: 'error', text: caught.message }),
   });
   return (
     <div className="page">
@@ -1163,21 +1400,11 @@ function Approvals({ user }: { user: User }) {
         detail="Review actions that require a second person. Self-approval is blocked by the server."
         action={
           <span className="inbox-count">
-            {data?.items.length ?? 0} OPEN REQUESTS
+            {data ? data.items.length : '—'} OPEN REQUESTS
           </span>
         }
       />
-      {message && (
-        <div
-          className={`notice ${message.includes('cannot') ? 'notice-warn' : ''}`}
-        >
-          <ShieldCheck size={16} />
-          {message}
-          <button aria-label="Dismiss" onClick={() => setMessage('')}>
-            <X size={15} />
-          </button>
-        </div>
-      )}
+      <Notice message={message} onDismiss={() => setMessage(undefined)} />
       <section className="panel inbox-panel">
         <div className="panel-head">
           <div>
@@ -1185,9 +1412,17 @@ function Approvals({ user }: { user: User }) {
             <p>Approval steps must complete in policy order.</p>
           </div>
           <div className="filter-chip">
-            <SlidersHorizontal size={14} /> All roles
+            <SlidersHorizontal size={14} aria-hidden /> All roles
           </div>
         </div>
+        {error && (
+          <ErrorState
+            title="The approval requests are not available"
+            error={error}
+            onRetry={() => void refetch()}
+          />
+        )}
+        {isLoading && <LoadingState label="Loading approval requests" />}
         {(data?.items ?? []).map((item) => (
           <ApprovalCard
             key={item.approval_id}
@@ -1199,7 +1434,7 @@ function Approvals({ user }: { user: User }) {
             loading={approve.isPending}
           />
         ))}
-        {!data?.items.length && (
+        {data && !data.items.length && (
           <EmptyState
             icon={<Check />}
             title="You are all caught up"
@@ -1234,35 +1469,43 @@ function ApprovalCard({
         step.roles.some((role) => user.roles.includes(role)),
     );
   const selfApproval = item.requester_id === user.id;
+  const titleId = useId();
+  const requestName = `${money(item.amount_minor, item.currency)} refund request for ${item.charge_id}`;
   return (
-    <article className="approval-card">
+    <article className="approval-card" aria-labelledby={titleId}>
       <div className="approval-card-main">
-        <div className="approval-symbol">
+        <div className="approval-symbol" aria-hidden="true">
           <WalletCards size={18} />
         </div>
         <div className="approval-copy">
           <div className="approval-title">
-            <b>{money(item.amount_minor, item.currency)} refund request</b>
+            <h3 id={titleId}>
+              {money(item.amount_minor, item.currency)} refund request
+            </h3>
             <StatusBadge status={item.tier} />
           </div>
           <div className="approval-meta">
             Payment <span className="mono-id">{item.charge_id}</span>
-            <span className="meta-dot">·</span> submitted by{' '}
-            <b>{item.requester_id}</b>
-            <span className="meta-dot">·</span>
+            <span className="meta-dot" aria-hidden="true">
+              ·
+            </span>{' '}
+            submitted by <b>{item.requester_id}</b>
+            <span className="meta-dot" aria-hidden="true">
+              ·
+            </span>
             {dateTime(item.created_at)}
           </div>
           <p>{item.note}</p>
-          <div className="approval-steps">
+          <div className="approval-steps" aria-label="Approval steps">
             {steps.map((step, index) => (
               <span
                 key={index}
                 className={step.approvals.length ? 'step-done' : 'step-wait'}
               >
                 {step.approvals.length ? (
-                  <Check size={12} />
+                  <Check size={12} aria-hidden />
                 ) : (
-                  <Clock3 size={12} />
+                  <Clock3 size={12} aria-hidden />
                 )}
                 {step.roles[0]}
                 {step.approvals.length ? ' approved' : ' approval'}
@@ -1278,8 +1521,10 @@ function ApprovalCard({
           </span>
         )}
         <button
+          type="button"
           className="decline-btn"
           disabled={loading || selfApproval}
+          aria-label={`Decline ${requestName}`}
           onClick={() => onApprove(waiting[0]?.index ?? 0, 'reject')}
         >
           Decline
@@ -1287,8 +1532,10 @@ function ApprovalCard({
         {waiting.map(({ step, index }) => (
           <button
             key={index}
+            type="button"
             className="primary-btn small-btn"
             disabled={loading || selfApproval}
+            aria-label={`Approve as ${step.roles[0]}: ${requestName}`}
             onClick={() => onApprove(index, 'approve')}
           >
             Approve as {step.roles[0]}
@@ -1300,7 +1547,7 @@ function ApprovalCard({
 }
 
 function ApprovalsPreview() {
-  const { data } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['approvals'],
     queryFn: () => api<{ items: Approval[] }>('/api/approvals?tool=refunds'),
   });
@@ -1308,7 +1555,7 @@ function ApprovalsPreview() {
     <div className="preview-list">
       {(data?.items ?? []).slice(0, 3).map((item) => (
         <Link to="/approvals" key={item.approval_id} className="preview-item">
-          <span className="preview-avatar">
+          <span className="preview-avatar" aria-hidden="true">
             {item.requester_id.slice(0, 1).toUpperCase()}
           </span>
           <span className="preview-copy">
@@ -1322,11 +1569,17 @@ function ApprovalsPreview() {
           </span>
         </Link>
       ))}
-      {!data?.items.length && (
+      {isLoading && <LoadingState label="Loading approvals" />}
+      {error && (
+        <div className="quiet-empty" role="alert">
+          The approval queue is not available.
+        </div>
+      )}
+      {data && !data.items.length && (
         <div className="quiet-empty">No pending approvals in your queue.</div>
       )}
       <Link to="/approvals" className="queue-link">
-        Open approval inbox <ArrowUpRight size={13} />
+        Open approval inbox <ArrowUpRight size={13} aria-hidden />
       </Link>
     </div>
   );
@@ -1334,7 +1587,8 @@ function ApprovalsPreview() {
 
 function Exceptions({ user }: { user: User }) {
   const client = useQueryClient();
-  const { data } = useQuery({
+  const titleId = useId();
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['exceptions'],
     queryFn: () =>
       api<{
@@ -1342,12 +1596,12 @@ function Exceptions({ user }: { user: User }) {
           id: string;
           exception_type: string;
           reconciliation_key: string;
-          details: Record<string, string>;
+          details: Record<string, unknown>;
           created_at: string;
         }>;
       }>('/api/exceptions'),
   });
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState<Message>();
   const [resolvingId, setResolvingId] = useState<string>();
   const [resolutionCode, setResolutionCode] = useState(
     'provider_record_confirmed',
@@ -1368,19 +1622,24 @@ function Exceptions({ user }: { user: User }) {
         body: JSON.stringify({ resolutionCode: code, note }),
       }),
     onSuccess: () => {
-      setMessage('Exception marked as resolved.');
+      setMessage({ tone: 'success', text: 'Exception marked as resolved.' });
       setResolvingId(undefined);
       setResolutionNote('');
       client.invalidateQueries();
     },
-    onError: (error: Error) => setMessage(error.message),
+    onError: (caught: Error) =>
+      setMessage({ tone: 'error', text: caught.message }),
   });
   const run = useMutation({
     mutationFn: () =>
       api('/api/reconciliation/run', { method: 'POST', body: '{}' }),
     onSuccess: () =>
-      setMessage('Reconciliation queued. Results will appear in this view.'),
-    onError: (error: Error) => setMessage(error.message),
+      setMessage({
+        tone: 'success',
+        text: 'Reconciliation queued. Results will appear in this view.',
+      }),
+    onError: (caught: Error) =>
+      setMessage({ tone: 'error', text: caught.message }),
   });
   return (
     <div className="page">
@@ -1395,32 +1654,35 @@ function Exceptions({ user }: { user: User }) {
               onClick={() => run.mutate()}
               disabled={run.isPending}
             >
-              <Activity size={15} />{' '}
+              <Activity size={15} aria-hidden />{' '}
               {run.isPending ? 'Queueing…' : 'Run reconciliation'}
             </button>
           ) : undefined
         }
       />
-      {message && (
-        <div className="notice">
-          <ShieldCheck size={16} />
-          {message}
-        </div>
-      )}
+      <Notice message={message} onDismiss={() => setMessage(undefined)} />
       <section className="panel table-panel">
         <div className="panel-head">
           <div>
             <h2>Open exceptions</h2>
-            <p>{data?.items.length ?? 0} items need Finance review</p>
+            <p>{data ? data.items.length : '—'} items need Finance review</p>
           </div>
           <span className="exception-pill">
-            <span /> OPEN
+            <span aria-hidden="true" /> OPEN
           </span>
         </div>
+        {error && (
+          <ErrorState
+            title="The exceptions are not available"
+            error={error}
+            onRetry={() => void refetch()}
+          />
+        )}
+        {isLoading && <LoadingState label="Loading exceptions" />}
         {(data?.items ?? []).map((item) => (
           <div className="exception-row" key={item.id}>
             <div className="exception-type">
-              <div className="exception-icon">
+              <div className="exception-icon" aria-hidden="true">
                 <Activity size={17} />
               </div>
               <div>
@@ -1428,13 +1690,20 @@ function Exceptions({ user }: { user: User }) {
                 <small>Key: {item.reconciliation_key}</small>
               </div>
             </div>
-            <div className="exception-detail">
-              {JSON.stringify(item.details)}
-            </div>
+            <dl className="exception-detail">
+              {Object.entries(item.details).map(([key, value]) => (
+                <div key={key}>
+                  <dt>{humanizeKey(key)}</dt>
+                  <dd>{formatDetail(key, value, item.details)}</dd>
+                </div>
+              ))}
+            </dl>
             <span className="date-cell">{dateTime(item.created_at)}</span>
             {user.roles.includes('finance') && (
               <button
+                type="button"
                 className="secondary-btn compact-btn"
+                aria-label={`Resolve ${item.exception_type.replaceAll('_', ' ')} for ${item.reconciliation_key}`}
                 onClick={() => setResolvingId(item.id)}
                 disabled={resolve.isPending}
               >
@@ -1443,7 +1712,7 @@ function Exceptions({ user }: { user: User }) {
             )}
           </div>
         ))}
-        {!data?.items.length && (
+        {data && !data.items.length && (
           <EmptyState
             icon={<Check />}
             title="No open exceptions"
@@ -1452,71 +1721,78 @@ function Exceptions({ user }: { user: User }) {
         )}
       </section>
       {resolvingId && (
-        <Modal onClose={() => setResolvingId(undefined)}>
+        <Dialog onClose={() => setResolvingId(undefined)} labelledBy={titleId}>
           <div className="modal-head">
             <div>
               <p className="eyebrow">RECONCILIATION REVIEW</p>
-              <h2>Resolve exception</h2>
+              <h2 id={titleId}>Resolve exception</h2>
             </div>
-            <button
-              className="icon-btn"
-              onClick={() => setResolvingId(undefined)}
-              aria-label="Close"
-            >
-              <X size={18} />
-            </button>
+            <CloseButton onClose={() => setResolvingId(undefined)} />
           </div>
-          <label className="resolution-field">
-            Resolution code
-            <input
-              value={resolutionCode}
-              onChange={(event) => setResolutionCode(event.target.value)}
-              maxLength={64}
-            />
-          </label>
-          <label className="resolution-field">
-            Review note
-            <textarea
-              value={resolutionNote}
-              onChange={(event) => setResolutionNote(event.target.value)}
-              minLength={10}
-              maxLength={1000}
-              placeholder="Describe the evidence reviewed and the outcome."
-            />
-          </label>
-          <div className="modal-actions">
-            <button
-              className="secondary-btn"
-              onClick={() => setResolvingId(undefined)}
-            >
-              Cancel
-            </button>
-            <button
-              className="primary-btn"
-              disabled={
-                resolve.isPending ||
-                resolutionCode.trim().length < 2 ||
-                resolutionNote.trim().length < 10
-              }
-              onClick={() =>
-                resolve.mutate({
-                  id: resolvingId,
-                  resolutionCode,
-                  note: resolutionNote,
-                })
-              }
-            >
-              {resolve.isPending ? 'Saving…' : 'Confirm resolution'}
-            </button>
-          </div>
-        </Modal>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              resolve.mutate({
+                id: resolvingId,
+                resolutionCode,
+                note: resolutionNote,
+              });
+            }}
+          >
+            <label className="resolution-field">
+              Resolution code
+              <input
+                value={resolutionCode}
+                onChange={(event) => setResolutionCode(event.target.value)}
+                minLength={2}
+                maxLength={64}
+                required
+              />
+            </label>
+            <label className="resolution-field">
+              Review note
+              <textarea
+                value={resolutionNote}
+                onChange={(event) => setResolutionNote(event.target.value)}
+                minLength={10}
+                maxLength={1000}
+                aria-describedby="resolution-note-hint"
+                placeholder="Describe the evidence reviewed and the outcome."
+                required
+              />
+            </label>
+            <p className="field-hint" id="resolution-note-hint">
+              Enter 10 to 1,000 characters. The audit trail keeps this note.
+            </p>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => setResolvingId(undefined)}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="primary-btn"
+                disabled={
+                  resolve.isPending ||
+                  resolutionCode.trim().length < 2 ||
+                  resolutionNote.trim().length < 10
+                }
+              >
+                {resolve.isPending ? 'Saving…' : 'Confirm resolution'}
+              </button>
+            </div>
+          </form>
+        </Dialog>
       )}
     </div>
   );
 }
 
 function Audit() {
-  const { data } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['audit'],
     queryFn: () =>
       api<{
@@ -1552,16 +1828,23 @@ function Audit() {
             onClick={() => verify.mutate()}
             disabled={verify.isPending}
           >
-            <ShieldCheck size={16} />
+            <ShieldCheck size={16} aria-hidden />
             {verify.isPending ? 'Verifying…' : 'Verify chain'}
           </button>
         }
       />
+      {verify.error && (
+        <div className="notice notice-warn" role="alert">
+          <XCircle size={16} aria-hidden />
+          The chain check did not run. {verify.error.message}
+        </div>
+      )}
       {verify.data && (
         <div
           className={`verify-banner ${verify.data.valid ? 'verified' : 'invalid'}`}
+          role={verify.data.valid ? 'status' : 'alert'}
         >
-          <div className="verify-icon">
+          <div className="verify-icon" aria-hidden="true">
             {verify.data.valid ? <Check size={18} /> : <XCircle size={18} />}
           </div>
           <div>
@@ -1588,9 +1871,17 @@ function Audit() {
             <p>Latest 100 events · immutable evidence</p>
           </div>
           <a className="secondary-btn" href="/api/audit?format=csv">
-            <ArrowDownLeft size={15} /> Export
+            <ArrowDownLeft size={15} aria-hidden /> Export audit CSV
           </a>
         </div>
+        {error && (
+          <ErrorState
+            title="The audit events are not available"
+            error={error}
+            onRetry={() => void refetch()}
+          />
+        )}
+        {isLoading && <LoadingState label="Loading audit events" />}
         {(data?.items ?? []).map((row) => (
           <div className="audit-row" key={row.seq}>
             <div className="audit-index">
@@ -1599,7 +1890,7 @@ function Audit() {
             <div className="audit-main">
               <b>{row.event_data.action.replaceAll(/[._]/g, ' ')}</b>
               <small>
-                {row.event_data.actorId} <span>·</span>{' '}
+                {row.event_data.actorId} <span aria-hidden="true">·</span>{' '}
                 {row.event_data.objectType}{' '}
                 {row.event_data.objectId.slice(0, 12)}
               </small>
@@ -1613,7 +1904,7 @@ function Audit() {
             </span>
           </div>
         ))}
-        {!data?.items.length && (
+        {data && !data.items.length && (
           <EmptyState
             icon={<Fingerprint />}
             title="No audit events yet"
@@ -1629,38 +1920,60 @@ function StatusBadge({ status }: { status: string }) {
   const key = status.toLowerCase().replaceAll(' ', '_');
   return (
     <span className={`status-badge status-${key}`}>
-      <span />
+      <span aria-hidden="true" />
       {status.replaceAll('_', ' ')}
     </span>
   );
 }
 
-function Modal({
-  children,
-  onClose,
+type Message = { tone: 'success' | 'error'; text: string };
+
+function Notice({
+  message,
+  onDismiss,
 }: {
-  children: ReactNode;
-  onClose: () => void;
+  message?: Message;
+  onDismiss: () => void;
 }) {
+  if (!message) return null;
+  const error = message.tone === 'error';
   return (
     <div
-      className="modal-backdrop"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+      className={`notice ${error ? 'notice-warn' : ''}`}
+      role={error ? 'alert' : 'status'}
     >
-      <section
-        className="modal-card"
-        role="dialog"
-        aria-modal="true"
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') onClose();
-        }}
-      >
-        {children}
-      </section>
+      {error ? (
+        <XCircle size={16} aria-hidden />
+      ) : (
+        <ShieldCheck size={16} aria-hidden />
+      )}
+      {message.text}
+      <button type="button" aria-label="Dismiss message" onClick={onDismiss}>
+        <X size={15} aria-hidden />
+      </button>
     </div>
   );
+}
+
+function humanizeKey(key: string) {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replaceAll('_', ' ')
+    .toLowerCase();
+}
+
+function formatDetail(
+  key: string,
+  value: unknown,
+  details: Record<string, unknown>,
+) {
+  if (value === null || value === undefined || value === '') return '—';
+  if (/minor$/i.test(key) && /^-?\d+$/.test(String(value))) {
+    return typeof details.currency === 'string'
+      ? money(String(value), details.currency)
+      : `${String(value)} minor units`;
+  }
+  return typeof value === 'object' ? JSON.stringify(value) : String(value);
 }
 
 function Detail({ label, value }: { label: string; value: string }) {
@@ -1683,7 +1996,9 @@ function EmptyState({
 }) {
   return (
     <div className="empty-state">
-      <div className="empty-icon">{icon}</div>
+      <div className="empty-icon" aria-hidden="true">
+        {icon}
+      </div>
       <b>{title}</b>
       <span>{detail}</span>
     </div>

@@ -14,6 +14,7 @@ export default [
             'apps/api/drizzle.config.ts',
             'apps/web/vite.config.ts',
             'e2e/playwright.config.ts',
+            'e2e/specs/accessibility.spec.ts',
             'e2e/specs/refunds.spec.ts',
             'scripts/new-tool.ts',
             'vitest.config.ts',
