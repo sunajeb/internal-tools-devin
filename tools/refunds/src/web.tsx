@@ -1120,8 +1120,11 @@ function Refunds({ user }: { user: User }) {
   const [filter, setFilter] = useState('all');
   const [searchParams, setSearchParams] = useSearchParams();
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['refunds'],
-    queryFn: () => api<{ items: Refund[] }>('/api/refunds'),
+    queryKey: ['refunds', filter],
+    queryFn: () =>
+      api<{ items: Refund[] }>(
+        filter === 'all' ? '/api/refunds' : `/api/refunds?status=${filter}`,
+      ),
     refetchInterval: 2_000,
   });
   const items = useMemo(

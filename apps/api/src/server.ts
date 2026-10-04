@@ -47,7 +47,12 @@ function safeEqual(first: string, second: string): boolean {
 }
 
 function csvCell(value: unknown): string {
-  const raw = value === null || value === undefined ? '' : String(value);
+  const raw =
+    value === null || value === undefined
+      ? ''
+      : typeof value === 'object' && !(value instanceof Date)
+        ? JSON.stringify(value)
+        : String(value);
   const text = /^[\s]*[=+\-@]/.test(raw) ? `'${raw}` : raw;
   return `"${text.replaceAll('"', '""')}"`;
 }

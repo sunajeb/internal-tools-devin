@@ -1,0 +1,5 @@
+# npm CLI's own bundled dependencies in the node base image (not application code).
+# Remove when an npm release older than 7 days ships the fixed versions.
+CVE-2026-102276 exp:2026-10-31
+CVE-2026-102278 exp:2026-10-31
+CVE-2026-19534 exp:2026-10-31
