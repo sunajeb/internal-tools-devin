@@ -149,7 +149,8 @@ function httpStatusOf(error: unknown): number | undefined {
   return typeof statusCode === 'number' ? statusCode : undefined;
 }
 
-const genericFailureMessage = 'The request could not be completed. Try again.';
+const genericFailureMessage =
+  'The server could not complete the request. Try again.';
 
 function sendRouteError(
   request: FastifyRequest,

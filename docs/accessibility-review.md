@@ -3,7 +3,7 @@
 | Field            | Value                                                                               |
 | ---------------- | ----------------------------------------------------------------------------------- |
 | Date             | 4 October 2026                                                                      |
-| Scope            | `apps/web/src/**`, `tools/refunds/src/web.tsx`, `packages/ui-kit/**`                |
+| Scope            | `apps/web/src/**`, `tools/refunds/src/web/**`, `packages/ui-kit/**`                 |
 | Standard         | WCAG 2.2 level AA (axe tags `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, `wcag22aa`) |
 | Tool             | `@axe-core/playwright` 4.13.0 (published 5 August 2026)                             |
 | Test             | `e2e/specs/accessibility.spec.ts`                                                   |
@@ -80,7 +80,7 @@ Severity: **S** = axe "serious" (blocks the test). **M** = WCAG failure that axe
 | 14  | M    | `ConfirmDialog` had no accessible name, no focus control and no Escape key.                                                                            | New `Dialog` component: `aria-modal`, name from `aria-labelledby` or `aria-label`, focus moves into the dialog, Tab stays in the dialog, Escape closes it, focus goes back to the opener. `ConfirmDialog` uses `Dialog`. |
 | 15  | UX   | No shared loading or error state. Each screen showed different (or no) feedback.                                                                       | New `LoadingState` (`role="status"`) and `ErrorState` (`role="alert"`, optional "Try again" button).                                                                                                                     |
 
-### 3.3 Refunds Console (`tools/refunds/src/web.tsx`)
+### 3.3 Refunds Console (`tools/refunds/src/web/**`)
 
 | #   | Sev. | Issue                                                                                                                                                                    | Fix                                                                                                                                                                                                                           |
 | --- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

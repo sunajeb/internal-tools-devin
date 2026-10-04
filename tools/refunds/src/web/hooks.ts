@@ -86,10 +86,11 @@ export function useRefundApprovals() {
   });
 }
 
-export function useExceptions() {
+export function useExceptions(poll = false) {
   return useQuery({
     queryKey: ['exceptions'],
     queryFn: () => api<{ items: ReconciliationException[] }>('/api/exceptions'),
+    refetchInterval: poll ? 2_000 : false,
   });
 }
 
