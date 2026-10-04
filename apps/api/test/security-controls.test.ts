@@ -373,7 +373,7 @@ describe('CSRF', () => {
       supervisor,
       'POST',
       `/api/charges/${chargeId}/reveal-email`,
-      options,
+      { body: { reason: 'Security test reveal reason.' }, ...options },
     );
   }
 
@@ -600,5 +600,103 @@ describe('app_runtime database role', () => {
       rolcreatedb: false,
       rolbypassrls: false,
     });
+  });
+});
+
+describe('refunds console controls', () => {
+  it('requires a reveal reason and stores it in the audit event', async () => {
+    const chargeId = await harness.charge(10_000n);
+    const url = `/api/charges/${chargeId}/reveal-email`;
+    for (const body of [{}, { reason: 'short' }]) {
+      const rejected = await harness.send(supervisor, 'POST', url, { body });
+      expect(rejected.statusCode, rejected.body).toBe(400);
+    }
+    const reason = 'Customer asked for a receipt by email.';
+    const revealed = await harness.send(supervisor, 'POST', url, {
+      body: { reason },
+    });
+    expect(revealed.statusCode, revealed.body).toBe(200);
+    const audit = await harness.owner.query(
+      `SELECT event_data->'after'->>'reason' AS reason
+       FROM foundation.audit_events
+       WHERE action='customer.email_revealed' AND object_id=$1`,
+      [chargeId],
+    );
+    expect(audit.rows).toEqual([{ reason }]);
+  });
+
+  it('shows each approval step in the refund timeline', async () => {
+    const chargeId = await harness.charge(1_000_000n);
+    const created = await requestRefund(supervisor, chargeId, '500100');
+    expect(created.statusCode, created.body).toBe(201);
+    expect(created.json().tier).toBe('dual');
+    const approvalId = await approvalFor(created.json().id);
+    for (const [persona, stepIndex] of [
+      [secondSupervisor, 0],
+      [finance, 1],
+    ] as const) {
+      const approved = await harness.send(
+        persona,
+        'POST',
+        `/api/approvals/${approvalId}/approve`,
+        { body: { stepIndex } },
+      );
+      expect(approved.statusCode, approved.body).toBe(200);
+    }
+    const detail = await harness.send(
+      supervisor,
+      'GET',
+      `/api/refunds/${created.json().id}`,
+    );
+    expect(detail.statusCode, detail.body).toBe(200);
+    const steps = (
+      detail.json().timeline as Array<{
+        action: string;
+        actorId: string;
+        after: { stepIndex: number } | null;
+      }>
+    )
+      .filter((event) => event.action === 'approval.approved')
+      .map((event) => [event.actorId, event.after?.stepIndex]);
+    expect(steps).toEqual([
+      [secondSupervisor.userId, 0],
+      [finance.userId, 1],
+    ]);
+  });
+
+  it('sorts payments by amount on the server and pages in that order', async () => {
+    const amounts = (items: Array<{ amount_minor: string }>) =>
+      items.map((item) => BigInt(item.amount_minor));
+    for (const [sort, ordered] of [
+      ['amount_desc', (a: bigint, b: bigint) => a >= b],
+      ['amount_asc', (a: bigint, b: bigint) => a <= b],
+    ] as const) {
+      const first = await harness.send(
+        agent,
+        'GET',
+        `/api/charges?sort=${sort}&limit=5`,
+      );
+      expect(first.statusCode, first.body).toBe(200);
+      const page = first.json();
+      const next = await harness.send(
+        agent,
+        'GET',
+        `/api/charges?sort=${sort}&limit=5&cursor=${encodeURIComponent(page.nextCursor)}`,
+      );
+      expect(next.statusCode, next.body).toBe(200);
+      const values = [...amounts(page.items), ...amounts(next.json().items)];
+      expect(values.length).toBe(10);
+      values.slice(1).forEach((value, index) => {
+        expect(ordered(values[index]!, value), `${sort} at ${index}`).toBe(
+          true,
+        );
+      });
+    }
+    const invalid = await harness.send(
+      agent,
+      'GET',
+      `/api/charges?sort=amount_desc&cursor=${encodeURIComponent('2026-01-01~ch_1')}`,
+    );
+    expect(invalid.statusCode).toBe(400);
   });
 });

@@ -1,23 +1,46 @@
+import { useEffect } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { ArrowUpRight, LockKeyhole, Shield, ShieldCheck } from 'lucide-react';
-import { api, Layout } from '@internal-tools/ui-kit';
+import {
+  api,
+  ErrorState,
+  Layout,
+  LoadingState,
+  mainContentId,
+} from '@internal-tools/ui-kit';
 import { webToolRegistry } from './tool-registry.js';
 
 type User = { id: string; displayName: string; roles: string[] };
 type Session = { authenticated: boolean; user?: User; environment: string };
 
 function App() {
-  const { data: session, isLoading } = useQuery({
+  const {
+    data: session,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ['session'],
     queryFn: () => api<Session>('/api/session'),
   });
   if (isLoading) {
     return (
-      <div className="loading">
-        <span className="loader" />
-        Loading secure workspace
-      </div>
+      <main className="app-status">
+        <LoadingState label="Loading secure workspace" />
+      </main>
+    );
+  }
+  if (error) {
+    return (
+      <main className="app-status">
+        <h1 className="sr-only">Ledgerline</h1>
+        <ErrorState
+          title="The workspace is not available"
+          error={error}
+          onRetry={() => void refetch()}
+        />
+      </main>
     );
   }
   if (!session?.authenticated) return <SignIn />;
@@ -25,17 +48,20 @@ function App() {
 }
 
 function SignIn() {
+  useEffect(() => {
+    document.title = 'Sign in · Ledgerline';
+  }, []);
   return (
     <main className="login-shell">
       <div className="login-brand">
-        <div className="brand-mark">
+        <div className="brand-mark" aria-hidden="true">
           <ShieldCheck size={22} />
         </div>
         <span>ledgerline</span>
         <small>INTERNAL OPERATIONS</small>
       </div>
       <section className="login-card">
-        <div className="login-icon">
+        <div className="login-icon" aria-hidden="true">
           <LockKeyhole size={22} />
         </div>
         <p className="eyebrow">SECURE WORKSPACE</p>
@@ -44,15 +70,16 @@ function SignIn() {
           Use your company identity to access the payments operations console.
         </p>
         <a className="primary-btn full" href="/auth/login">
-          Continue with company SSO <ArrowUpRight size={16} />
+          Continue with company SSO <ArrowUpRight size={16} aria-hidden />
         </a>
         <div className="login-foot">
-          <Shield size={15} /> Protected by your organization’s identity
-          provider
+          <Shield size={15} aria-hidden /> Protected by your organization’s
+          identity provider
         </div>
       </section>
       <div className="login-caption">
-        Internal tools foundation <span>·</span> Access is monitored and audited
+        Internal tools foundation <span aria-hidden="true">·</span> Access is
+        monitored and audited
       </div>
     </main>
   );
@@ -74,6 +101,9 @@ function Shell({ session }: { session: Session }) {
     webToolRegistry.find((tool) =>
       tool.navigation.some((item) => item.to === active.to),
     ) ?? webToolRegistry[0]!;
+  useEffect(() => {
+    document.title = `${active.label} · ${activeTool.name} · Ledgerline`;
+  }, [active.label, activeTool.name]);
   const logout = useMutation({
     mutationFn: () =>
       api<{ logoutUrl?: string }>('/api/logout', {
@@ -90,9 +120,12 @@ function Shell({ session }: { session: Session }) {
   });
   return (
     <div className="app-frame">
-      <aside className="sidebar">
-        <Link to="/" className="brand-lockup">
-          <div className="brand-mark">
+      <a className="skip-link" href={`#${mainContentId}`}>
+        Skip to main content
+      </a>
+      <aside className="sidebar" aria-label="Workspace">
+        <Link to="/" className="brand-lockup" aria-label="Ledgerline home">
+          <div className="brand-mark" aria-hidden="true">
             <ShieldCheck size={19} />
           </div>
           <div>
@@ -102,7 +135,7 @@ function Shell({ session }: { session: Session }) {
         </Link>
         <div className="workspace-label">WORKSPACE</div>
         <div className="tool-select">
-          <div className="tool-icon">
+          <div className="tool-icon" aria-hidden="true">
             <activeTool.icon size={17} />
           </div>
           <div>
@@ -117,15 +150,16 @@ function Shell({ session }: { session: Session }) {
               key={to}
               to={to}
               className={`nav-item ${active.to === to ? 'selected' : ''}`}
+              aria-current={active.to === to ? 'page' : undefined}
             >
-              <Icon size={17} strokeWidth={1.8} />
+              <Icon size={17} strokeWidth={1.8} aria-hidden />
               <span>{label}</span>
             </Link>
           ))}
         </nav>
         <div className="sidebar-bottom">
           <div className="uptime">
-            <span className="pulse-dot" />
+            <span className="pulse-dot" aria-hidden="true" />
             <div>
               <b>Local prototype</b>
               <small>Internal tools workspace</small>
@@ -136,35 +170,45 @@ function Shell({ session }: { session: Session }) {
           </div>
         </div>
       </aside>
-      <main className="main-panel">
+      <div className="main-panel">
         <header className="topbar">
-          <div className="breadcrumbs">
+          <nav className="breadcrumbs" aria-label="Breadcrumb">
             <span>{activeTool.name}</span>
-            <span className="crumb-slash">/</span>
-            <b>{active.label}</b>
-          </div>
+            <span className="crumb-slash" aria-hidden="true">
+              /
+            </span>
+            <b aria-current="page">{active.label}</b>
+          </nav>
           <div className="top-actions">
             <div className="env-tag">
-              <span />
+              <span aria-hidden="true" />
               {session.environment} ENVIRONMENT
             </div>
-            <div className="top-divider" />
-            <button
-              className="profile-btn"
-              aria-label="Sign out"
-              onClick={() => logout.mutate()}
-            >
-              <span className="avatar">
+            <div className="top-divider" aria-hidden="true" />
+            <div className="profile-btn">
+              <span className="avatar" aria-hidden="true">
                 {user.displayName.slice(0, 1).toUpperCase()}
               </span>
               <span className="profile-copy">
                 <b>{user.displayName}</b>
                 <small>{user.roles.join(' · ')}</small>
               </span>
-              <span className="signout-label">Sign out</span>
-            </button>
+              <button
+                type="button"
+                className="signout-btn"
+                onClick={() => logout.mutate()}
+                disabled={logout.isPending}
+              >
+                {logout.isPending ? 'Signing out…' : 'Sign out'}
+              </button>
+            </div>
           </div>
         </header>
+        {logout.error && (
+          <div className="shell-alert" role="alert">
+            Sign-out failed. {logout.error.message}
+          </div>
+        )}
         <Layout>
           <Routes>
             {webToolRegistry.map((tool) => {
@@ -180,7 +224,7 @@ function Shell({ session }: { session: Session }) {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Layout>
-      </main>
+      </div>
     </div>
   );
 }
