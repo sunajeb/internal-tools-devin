@@ -29,6 +29,10 @@ variable "app_integration_subnet_id" {
   type = string
 }
 
+variable "deployment_runner_subnet_id" {
+  type = string
+}
+
 variable "acr_id" {
   type = string
 }
@@ -77,6 +81,14 @@ variable "oidc_client_id" {
 }
 
 variable "oidc_issuer" {
+  type = string
+}
+
+variable "oidc_redirect_uri" {
+  type = string
+}
+
+variable "app_environment" {
   type = string
 }
 

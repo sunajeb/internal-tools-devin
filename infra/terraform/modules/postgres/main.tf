@@ -15,8 +15,7 @@ resource "azurerm_postgresql_flexible_server" "main" {
   auto_grow_enabled             = true
   zone                          = "1"
   backup_retention_days         = 35
-  # This value can only be set when the server is created. Changing it later forces a new server.
-  geo_redundant_backup_enabled = true
+  geo_redundant_backup_enabled  = true
   authentication {
     active_directory_auth_enabled = true
     password_auth_enabled         = var.password_auth_enabled

@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "rootDir": "src", "outDir": "dist", "composite": true },
+  "references": [
+    { "path": "../../packages/foundation" },
+    { "path": "../../tools/refunds" }
+  ],
+  "include": ["src/**/*.ts"]
+}

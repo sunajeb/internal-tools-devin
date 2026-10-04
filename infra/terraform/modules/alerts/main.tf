@@ -90,14 +90,17 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "outbox_failed" {
   description          = "Outbox delivery failures were reported."
   severity             = 2
   evaluation_frequency = "PT5M"
-  window_duration      = "PT5M"
+  window_duration      = "PT10M"
   criteria {
-    query                   = "customMetrics | where name == \"outbox_failed_total\" | summarize failed = max(value)"
+    query                   = <<-QUERY
+      customMetrics
+      | where name == "outbox_failed_total"
+      | summarize failed = sum(value)
+    QUERY
     time_aggregation_method = "Maximum"
     metric_measure_column   = "failed"
     operator                = "GreaterThan"
     threshold               = 0
-    # The application must emit the outbox_failed_total custom metric.
     failing_periods {
       minimum_failing_periods_to_trigger_alert = 1
       number_of_evaluation_periods             = 1

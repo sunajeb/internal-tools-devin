@@ -14,20 +14,25 @@ locals {
     WEBSITES_PORT                         = tostring(var.websites_port)
     APPLICATIONINSIGHTS_CONNECTION_STRING = var.application_insights_connection_string
     NODE_ENV                              = "production"
+    PORT                                  = tostring(var.websites_port)
+    APP_ENV                               = var.app_environment
     PGHOST                                = var.postgres_fqdn
+    PGPORT                                = "5432"
     PGDATABASE                            = var.postgres_database_name
     PGSSLMODE                             = "require"
-    PGUSER                                = var.name # The PostgreSQL Entra principal uses the web app name.
+    PGUSER                                = var.name
     SESSION_SECRET                        = "@Microsoft.KeyVault(VaultName=${var.key_vault_name};SecretName=session-secret)"
+    WEBHOOK_SECRET                        = "@Microsoft.KeyVault(VaultName=${var.key_vault_name};SecretName=webhook-secret)"
     OIDC_CLIENT_SECRET                    = "@Microsoft.KeyVault(VaultName=${var.key_vault_name};SecretName=oidc-client-secret)"
     OIDC_CLIENT_ID                        = var.oidc_client_id
     OIDC_ISSUER                           = var.oidc_issuer
+    OIDC_REDIRECT_URI                     = var.oidc_redirect_uri
   }
 }
 
-# Front Door cannot present client certificates, and the Node service implements Entra OIDC itself.
 #trivy:ignore:AZU-0001
 #trivy:ignore:AZU-0003
+# tflint-ignore: azurerm_app_service_missing_auto_heal_setting # Health check eviction replaces unhealthy instances. A request-count trigger recycles healthy instances.
 resource "azurerm_linux_web_app" "main" {
   name                          = var.name
   resource_group_name           = var.resource_group_name
@@ -54,7 +59,7 @@ resource "azurerm_linux_web_app" "main" {
     ftps_state                              = "Disabled"
     http2_enabled                           = true
     vnet_route_all_enabled                  = true
-    health_check_path                       = "/healthz"
+    health_check_path                       = "/health/live"
     health_check_eviction_time_in_min       = 5
     container_registry_use_managed_identity = true
     application_stack {
@@ -75,17 +80,6 @@ resource "azurerm_linux_web_app" "main" {
       }]
     }
     scm_ip_restriction_default_action = "Deny"
-    auto_heal_setting {
-      trigger {
-        requests {
-          count    = 10
-          interval = "00:05:00"
-        }
-      }
-      action {
-        action_type = "Recycle"
-      }
-    }
   }
 
   logs {
@@ -100,9 +94,9 @@ resource "azurerm_linux_web_app" "main" {
   tags = var.tags
 }
 
-# The staging slot uses the same Front Door and application-managed OIDC controls as production.
 #trivy:ignore:AZU-0001
 #trivy:ignore:AZU-0003
+# tflint-ignore: azurerm_app_service_missing_auto_heal_setting # Health check eviction replaces unhealthy instances. A request-count trigger recycles healthy instances.
 resource "azurerm_linux_web_app_slot" "staging" {
   name                          = "staging"
   app_service_id                = azurerm_linux_web_app.main.id
@@ -110,7 +104,6 @@ resource "azurerm_linux_web_app_slot" "staging" {
   public_network_access_enabled = true
   virtual_network_subnet_id     = var.app_integration_subnet_id
   client_affinity_enabled       = false
-  # Each slot has its own managed identity. Verify the principal name in Entra ID before you create the PostgreSQL role.
   app_settings = merge(local.app_settings, {
     PGUSER = "${var.name}/slots/staging"
   })
@@ -126,7 +119,7 @@ resource "azurerm_linux_web_app_slot" "staging" {
     ftps_state                              = "Disabled"
     http2_enabled                           = true
     vnet_route_all_enabled                  = true
-    health_check_path                       = "/healthz"
+    health_check_path                       = "/health/live"
     health_check_eviction_time_in_min       = 5
     container_registry_use_managed_identity = true
     application_stack {
@@ -146,18 +139,13 @@ resource "azurerm_linux_web_app_slot" "staging" {
         x_forwarded_host  = []
       }]
     }
-    scm_ip_restriction_default_action = "Deny"
-    auto_heal_setting {
-      trigger {
-        requests {
-          count    = 10
-          interval = "00:05:00"
-        }
-      }
-      action {
-        action_type = "Recycle"
-      }
+    ip_restriction {
+      name                      = "AllowDeploymentRunner"
+      priority                  = 200
+      action                    = "Allow"
+      virtual_network_subnet_id = var.deployment_runner_subnet_id
     }
+    scm_ip_restriction_default_action = "Deny"
   }
 
   logs {
@@ -170,7 +158,6 @@ resource "azurerm_linux_web_app_slot" "staging" {
   }
 
   tags = var.tags
-  # Deploy to staging, warm via /healthz, then swap for zero downtime.
 }
 
 resource "azurerm_role_assignment" "acr_pull_web" {

@@ -36,6 +36,13 @@ resource "azuread_service_principal" "main" {
   tags                         = [for key, value in var.tags : "${key}=${value}"]
 }
 
+resource "azuread_app_role_assignment" "allowed_groups" {
+  for_each            = toset(var.allowed_group_object_ids)
+  app_role_id         = "00000000-0000-0000-0000-000000000000"
+  principal_object_id = each.value
+  resource_object_id  = azuread_service_principal.main.object_id
+}
+
 resource "time_rotating" "oidc" {
   rotation_days = 180
 }
@@ -51,10 +58,17 @@ resource "azuread_application_password" "oidc" {
 }
 
 resource "terraform_data" "secret_writer_role" {
-  input = var.secret_writer_role_assignment_id
+  input = {
+    role_assignment = var.secret_writer_role_assignment_id
+    network         = var.key_vault_network_dependency_ids
+  }
 }
 
-# The secret expires with its rotating Entra application password.
+resource "time_sleep" "rbac_propagation" {
+  create_duration = "120s"
+  depends_on      = [terraform_data.secret_writer_role]
+}
+
 #trivy:ignore:AZU-0017
 resource "azurerm_key_vault_secret" "oidc_client_secret" {
   name            = "oidc-client-secret"
@@ -63,7 +77,7 @@ resource "azurerm_key_vault_secret" "oidc_client_secret" {
   content_type    = "OIDC client secret"
   expiration_date = azuread_application_password.oidc.end_date
   tags            = var.tags
-  depends_on      = [terraform_data.secret_writer_role]
+  depends_on      = [time_sleep.rbac_propagation]
 
   lifecycle {
     prevent_destroy = true

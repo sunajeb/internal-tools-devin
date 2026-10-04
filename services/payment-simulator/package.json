@@ -1,0 +1,14 @@
+{
+  "name": "@internal-tools/payment-simulator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "fastify": "^5.2.1"
+  }
+}

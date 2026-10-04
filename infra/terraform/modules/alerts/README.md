@@ -14,5 +14,5 @@ All alert resource IDs.
 
 ## Important notes
 
-The application must emit the `outbox_failed_total` custom metric for the query alert to fire.
+The app must emit `outbox_failed_total` as an OpenTelemetry counter through the Azure Monitor exporter. The exporter sends the increment for each interval (delta temporality). The alert adds the values in a 10-minute window and fires when the total is more than 0.
 This module stays separate from monitoring resources to avoid a web app dependency cycle.

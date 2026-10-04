@@ -1,0 +1,160 @@
+{
+  "realm": "internal-tools",
+  "enabled": true,
+  "displayName": "Internal Tools Local",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "groups": [
+    { "name": "refund-agent" },
+    { "name": "refund-supervisor" },
+    { "name": "refund-finance" },
+    { "name": "auditor" },
+    { "name": "platform-admin" },
+    { "name": "flag-editor" },
+    { "name": "flag-approver" }
+  ],
+  "clients": [
+    {
+      "clientId": "internal-tools",
+      "name": "Internal Tools BFF",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "local-client-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://localhost:5173/auth/callback"],
+      "webOrigins": ["http://localhost:5173"],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:5173/"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "agent",
+      "enabled": true,
+      "firstName": "Avery",
+      "lastName": "Agent",
+      "email": "agent@example.test",
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "LocalAgent123!", "temporary": false }
+      ],
+      "groups": ["/refund-agent"]
+    },
+    {
+      "username": "supervisor",
+      "enabled": true,
+      "firstName": "Sam",
+      "lastName": "Supervisor",
+      "email": "supervisor@example.test",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "LocalSupervisor123!",
+          "temporary": false
+        }
+      ],
+      "groups": ["/refund-supervisor"]
+    },
+    {
+      "username": "finance",
+      "enabled": true,
+      "firstName": "Finley",
+      "lastName": "Finance",
+      "email": "finance@example.test",
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "LocalFinance123!", "temporary": false }
+      ],
+      "groups": ["/refund-finance"]
+    },
+    {
+      "username": "auditor",
+      "enabled": true,
+      "firstName": "Alex",
+      "lastName": "Auditor",
+      "email": "auditor@example.test",
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "LocalAuditor123!", "temporary": false }
+      ],
+      "groups": ["/auditor"]
+    },
+    {
+      "username": "platform-admin",
+      "enabled": true,
+      "firstName": "Pat",
+      "lastName": "Platform",
+      "email": "platform-admin@example.test",
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "LocalPlatform123!", "temporary": false }
+      ],
+      "groups": ["/platform-admin"]
+    },
+    {
+      "username": "agent-supervisor",
+      "enabled": true,
+      "firstName": "Jordan",
+      "lastName": "DualRole",
+      "email": "agent-supervisor@example.test",
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "LocalDualRole123!", "temporary": false }
+      ],
+      "groups": ["/refund-agent", "/refund-supervisor"]
+    },
+    {
+      "username": "flag-editor",
+      "enabled": true,
+      "firstName": "Felix",
+      "lastName": "Editor",
+      "email": "flag-editor@example.test",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "LocalFlagEditor123!",
+          "temporary": false
+        }
+      ],
+      "groups": ["/flag-editor"]
+    },
+    {
+      "username": "flag-approver",
+      "enabled": true,
+      "firstName": "Frances",
+      "lastName": "Approver",
+      "email": "flag-approver@example.test",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "LocalFlagApprover123!",
+          "temporary": false
+        }
+      ],
+      "groups": ["/flag-approver"]
+    }
+  ]
+}

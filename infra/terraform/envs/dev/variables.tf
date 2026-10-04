@@ -24,6 +24,10 @@ variable "tenant_id" {
   type = string
 }
 
+variable "allowed_group_object_ids" {
+  type = list(string)
+}
+
 variable "owner" {
   type = string
 }
@@ -64,7 +68,7 @@ variable "image" {
 
 variable "worker_command" {
   type    = string
-  default = "node dist/worker.js"
+  default = "npm run start -w @internal-tools/worker"
 }
 
 variable "websites_port" {

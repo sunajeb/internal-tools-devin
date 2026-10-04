@@ -6,6 +6,7 @@ Creates a Linux App Service plan, a production web app, a staging slot, identity
 
 - `plan_sku`, `worker_count`, and `zone_balancing_enabled` set compute capacity.
 - `app_integration_subnet_id` connects outbound traffic to the virtual network.
+- `deployment_runner_subnet_id` allows the runner to reach the staging slot.
 - `front_door_profile_guid` restricts inbound traffic to the trusted Front Door profile.
 - Registry, Key Vault, database, and Application Insights inputs configure the container.
 
@@ -15,5 +16,6 @@ The app ID, name, hostname, production identity, and staging identity.
 
 ## Important notes
 
-App and SCM ingress default to deny. Deploy to staging, warm `/healthz`, then swap slots for zero downtime.
+App and SCM ingress default to deny. Run the staging `/health/ready` check from the deployment runner before a slot swap.
 The app uses managed identity for ACR pulls and Key Vault references.
+Requests from the runner subnet reach the staging slot directly. They do not go through the Front Door WAF or rate limit. Put only the approved apply runner in this subnet.

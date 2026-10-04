@@ -30,6 +30,7 @@ locals {
   postgres_name            = "${local.base_name}-pg"
   front_door_name          = "${local.base_name}-fd"
   front_door_endpoint_name = "${local.base_name}-fd"
+  oidc_redirect_uri        = "https://${module.front_door.endpoint_hostname}/auth/callback"
   tags = {
     env         = local.environment
     owner       = var.owner
@@ -54,6 +55,7 @@ module "network" {
   worker_prefix            = "10.${local.env_octet}.2.0/26"
   private_endpoints_prefix = "10.${local.env_octet}.3.0/27"
   postgres_prefix          = "10.${local.env_octet}.4.0/27"
+  runner_prefix            = "10.${local.env_octet}.5.0/27"
   tags                     = local.tags
 }
 
@@ -98,6 +100,7 @@ module "app_service" {
   zone_balancing_enabled                 = local.settings.web_zone_balancing
   worker_count                           = local.settings.web_worker_count
   app_integration_subnet_id              = module.network.app_integration_subnet_id
+  deployment_runner_subnet_id            = module.network.runner_subnet_id
   acr_id                                 = module.registry.id
   acr_login_server                       = module.registry.login_server
   image                                  = var.image
@@ -110,6 +113,8 @@ module "app_service" {
   key_vault_name                         = local.key_vault_name
   oidc_client_id                         = module.identity.client_id
   oidc_issuer                            = module.identity.issuer_url
+  oidc_redirect_uri                      = local.oidc_redirect_uri
+  app_environment                        = upper(local.environment)
   tags                                   = local.tags
 }
 
@@ -126,6 +131,7 @@ module "worker" {
   websites_port                          = var.websites_port
   postgres_fqdn                          = module.postgres.fqdn
   postgres_database_name                 = module.postgres.database_name
+  key_vault_name                         = local.key_vault_name
   application_insights_connection_string = module.monitoring.application_insights_connection_string
   log_analytics_workspace_id             = module.monitoring.log_analytics_workspace_id
   zone_balancing_enabled                 = local.settings.worker_zone_balancing
@@ -186,9 +192,11 @@ module "identity" {
   source                           = "../../modules/identity"
   display_name                     = "${local.base_name}-oidc"
   tenant_id                        = var.tenant_id
-  redirect_uri                     = "https://${module.front_door.endpoint_hostname}/auth/callback"
+  allowed_group_object_ids         = var.allowed_group_object_ids
+  redirect_uri                     = local.oidc_redirect_uri
   key_vault_id                     = module.key_vault.id
   secret_writer_role_assignment_id = module.key_vault.deployer_role_assignment_id
+  key_vault_network_dependency_ids = [module.key_vault.private_endpoint_id, module.network.key_vault_dns_zone_link_id]
   tags                             = local.tags
 }
 

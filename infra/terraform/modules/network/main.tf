@@ -9,25 +9,34 @@ resource "azurerm_virtual_network" "main" {
 locals {
   subnet_data = {
     app_integration = {
-      name             = "${var.name}-app-integration"
-      address_prefixes = [var.app_integration_prefix]
-      delegation       = "Microsoft.Web/serverFarms"
+      name              = "${var.name}-app-integration"
+      address_prefixes  = [var.app_integration_prefix]
+      delegation        = "Microsoft.Web/serverFarms"
+      service_endpoints = []
     }
     worker = {
-      name             = "${var.name}-worker"
-      address_prefixes = [var.worker_prefix]
-      # Each App Service plan can integrate with only one subnet.
-      delegation = "Microsoft.Web/serverFarms"
+      name              = "${var.name}-worker"
+      address_prefixes  = [var.worker_prefix]
+      delegation        = "Microsoft.Web/serverFarms"
+      service_endpoints = []
     }
     private_endpoints = {
-      name             = "${var.name}-private-endpoints"
-      address_prefixes = [var.private_endpoints_prefix]
-      delegation       = null
+      name              = "${var.name}-private-endpoints"
+      address_prefixes  = [var.private_endpoints_prefix]
+      delegation        = null
+      service_endpoints = []
     }
     postgres = {
-      name             = "${var.name}-postgres"
-      address_prefixes = [var.postgres_prefix]
-      delegation       = "Microsoft.DBforPostgreSQL/flexibleServers"
+      name              = "${var.name}-postgres"
+      address_prefixes  = [var.postgres_prefix]
+      delegation        = "Microsoft.DBforPostgreSQL/flexibleServers"
+      service_endpoints = []
+    }
+    runner = {
+      name              = "${var.name}-runner"
+      address_prefixes  = [var.runner_prefix]
+      delegation        = null
+      service_endpoints = ["Microsoft.Web"]
     }
   }
 }
@@ -39,6 +48,7 @@ resource "azurerm_subnet" "main" {
   resource_group_name               = var.resource_group_name
   virtual_network_name              = azurerm_virtual_network.main.name
   address_prefixes                  = each.value.address_prefixes
+  service_endpoints                 = each.value.service_endpoints
   private_endpoint_network_policies = each.key == "private_endpoints" ? "NetworkSecurityGroupEnabled" : "Disabled"
 
   dynamic "delegation" {
@@ -98,7 +108,7 @@ resource "azurerm_network_security_rule" "pe_https_from_app" {
   protocol                    = "Tcp"
   source_port_range           = "*"
   destination_port_range      = "443"
-  source_address_prefixes     = [var.app_integration_prefix, var.worker_prefix]
+  source_address_prefixes     = [var.app_integration_prefix, var.worker_prefix, var.runner_prefix]
   destination_address_prefix  = "*"
   resource_group_name         = var.resource_group_name
   network_security_group_name = azurerm_network_security_group.main["private_endpoints"].name

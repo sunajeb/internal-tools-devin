@@ -9,9 +9,9 @@ resource "azurerm_service_plan" "main" {
   tags                   = var.tags
 }
 
-# This private worker accepts no clients and is not user-facing; the web app owns Entra OIDC.
 #trivy:ignore:AZU-0001
 #trivy:ignore:AZU-0003
+# tflint-ignore: azurerm_app_service_missing_auto_heal_setting # Health check eviction replaces unhealthy instances. A request-count trigger recycles healthy instances.
 resource "azurerm_linux_web_app" "main" {
   name                          = var.name
   resource_group_name           = var.resource_group_name
@@ -24,10 +24,13 @@ resource "azurerm_linux_web_app" "main" {
     WEBSITES_PORT                         = tostring(var.websites_port)
     APPLICATIONINSIGHTS_CONNECTION_STRING = var.application_insights_connection_string
     NODE_ENV                              = "production"
+    PORT                                  = tostring(var.websites_port)
     PGHOST                                = var.postgres_fqdn
+    PGPORT                                = "5432"
     PGDATABASE                            = var.postgres_database_name
     PGSSLMODE                             = "require"
-    PGUSER                                = var.name # The PostgreSQL Entra principal uses the worker app name.
+    PGUSER                                = var.name
+    STRIPE_SECRET_KEY                     = "@Microsoft.KeyVault(VaultName=${var.key_vault_name};SecretName=stripe-secret-key)"
   }
 
   identity {
@@ -42,22 +45,11 @@ resource "azurerm_linux_web_app" "main" {
     http2_enabled                           = true
     vnet_route_all_enabled                  = true
     app_command_line                        = var.worker_command
-    health_check_path                       = "/healthz" # The worker must listen on WEBSITES_PORT and answer /healthz for App Service probes.
+    health_check_path                       = "/health/live"
     health_check_eviction_time_in_min       = 5
     ip_restriction_default_action           = "Deny"
     scm_ip_restriction_default_action       = "Deny"
     container_registry_use_managed_identity = true
-    auto_heal_setting {
-      trigger {
-        requests {
-          count    = 10
-          interval = "00:05:00"
-        }
-      }
-      action {
-        action_type = "Recycle"
-      }
-    }
     application_stack {
       docker_image_name   = var.image
       docker_registry_url = "https://${var.acr_login_server}"
