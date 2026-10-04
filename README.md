@@ -1,8 +1,12 @@
-# Internal Tools Foundation and Refunds Console
+<img src="apps/web/public/favicon.svg" width="48" alt="Ledgerline logo">
+
+# Ledgerline
+
+Internal tools platform: shared Foundation, Refunds Console, Feature-Flag Panel.
 
 ## What it is
 
-This repository is a local prototype for fintech internal tools. It has three parts:
+Ledgerline is a local prototype for fintech internal tools. It has three parts:
 
 - **The Foundation** (`packages/foundation`). It gives each tool sign-in, permission checks, CSRF checks, input validation, approvals, an audit hash chain, data masking, idempotency, and an outbox.
 - **The Refunds Console** (`tools/refunds`). It is the reference tool. Agents request refunds. Supervisors and Finance approve them. A worker sends approved refunds to a payment provider.

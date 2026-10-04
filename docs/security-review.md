@@ -1,4 +1,4 @@
-# Security review: Foundation and Refunds Console
+# Ledgerline security review: Foundation and Refunds Console
 
 - Scope: Foundation and Refunds Console.
 - Date: 2026-10-04.

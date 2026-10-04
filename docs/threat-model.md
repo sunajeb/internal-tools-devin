@@ -1,4 +1,4 @@
-# Threat model
+# Ledgerline threat model
 
 ## Scope
 

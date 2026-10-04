@@ -1,8 +1,8 @@
-# Internal Tools Foundation and Refunds Console: Product Requirements Document (PRD)
+# Ledgerline: Product Requirements Document (PRD)
 
 | Field | Value |
 |---|---|
-| Product | Internal Tools Foundation ("the Foundation"), with two reference tools: Refunds Console and Feature-Flag Panel |
+| Product | Ledgerline, an internal tools platform. It has a shared Foundation ("the Foundation") and two reference tools: Refunds Console and Feature-Flag Panel. |
 | Version | 1.0 (draft) |
 | Date | 4 October 2026 |
 | Owner | Engineering (internal tools platform) |
