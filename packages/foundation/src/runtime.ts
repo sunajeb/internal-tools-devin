@@ -552,7 +552,12 @@ function registerApprovalRoutes(app: FastifyInstance, state: RuntimeState) {
       permission,
     );
     if (!authorized) return;
-    const effectiveDecision = body.data.decision ?? decision;
+    if (body.data.decision && body.data.decision !== decision) {
+      return reply
+        .code(400)
+        .send({ error: 'The decision does not match the request.' });
+    }
+    const effectiveDecision = decision;
     const requestedStep = body.data.stepIndex;
     const stepIndex =
       requestedStep ?? nextApprovalStep(row.steps, authorized.roles);

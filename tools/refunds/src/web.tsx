@@ -1149,10 +1149,13 @@ function Approvals({ user }: { user: User }) {
       stepIndex: number;
       decision: string;
     }) =>
-      api(`/api/approvals/${id}/approve`, {
-        method: 'POST',
-        body: JSON.stringify({ stepIndex, decision }),
-      }),
+      api(
+        `/api/approvals/${id}/${decision === 'reject' ? 'reject' : 'approve'}`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ stepIndex, decision }),
+        },
+      ),
     onSuccess: () => {
       setMessage('Approval recorded. The request has been updated.');
       client.invalidateQueries();
