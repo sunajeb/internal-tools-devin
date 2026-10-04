@@ -7,7 +7,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./web": "./src/web.tsx",
+    "./web": "./src/web/index.tsx",
     "./worker": "./src/worker.ts"
   },
   "dependencies": {

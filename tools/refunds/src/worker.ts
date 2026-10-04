@@ -109,35 +109,6 @@ async function updateRefundStatus(
   }
 }
 
-async function recordRetryLimit(
-  pool: pg.Pool,
-  refundId: string,
-  attempts: number,
-) {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const current = await client.query(
-      'SELECT status FROM refunds.refunds WHERE id=$1 FOR UPDATE',
-      [refundId],
-    );
-    if (current.rows[0]?.status === 'executing') {
-      await appendWorkerAudit(client, {
-        action: 'refund.execution_retry_limit',
-        objectId: refundId,
-        before: { status: 'executing' },
-        after: { status: 'executing', attempts },
-      });
-    }
-    await client.query('COMMIT');
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
-}
-
 async function recordException(
   pool: pg.Pool,
   exceptionType: ExceptionType,

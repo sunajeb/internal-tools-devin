@@ -225,7 +225,8 @@ export async function buildServer(options: BuildServerOptions = {}) {
       signature &&
       safeEqual(signature, expected) &&
       typeof headerToken === 'string' &&
-      safeEqual(cookieToken!, headerToken),
+      typeof cookieToken === 'string' &&
+      safeEqual(cookieToken, headerToken),
     );
   };
 
@@ -313,10 +314,10 @@ export async function buildServer(options: BuildServerOptions = {}) {
   server.get('/auth/callback', async (request, reply) => {
     const state = (request.query as { state?: string }).state;
     const auth = state ? pendingAuth.get(state) : undefined;
-    if (!auth) {
+    if (!state || !auth) {
       return reply.code(400).send({ error: 'Sign-in expired. Start again.' });
     }
-    pendingAuth.delete(state!);
+    pendingAuth.delete(state);
     if (Date.now() - auth.createdAt > 5 * 60_000) {
       return reply.code(400).send({ error: 'Sign-in expired. Start again.' });
     }
@@ -573,7 +574,13 @@ export async function buildServer(options: BuildServerOptions = {}) {
       const match =
         typeof signature === 'string' &&
         /^t=(\d+),v1=([a-f0-9]+)$/.exec(signature);
-      if (!match || Math.abs(Date.now() / 1000 - Number(match[1])) > 300) {
+      const signedAt = match ? match[1] : undefined;
+      const digest = match ? match[2] : undefined;
+      if (
+        !signedAt ||
+        !digest ||
+        Math.abs(Date.now() / 1000 - Number(signedAt)) > 300
+      ) {
         return reply
           .code(401)
           .send({ error: 'Webhook signature is invalid or expired.' });
@@ -582,9 +589,9 @@ export async function buildServer(options: BuildServerOptions = {}) {
         'sha256',
         env.WEBHOOK_SECRET ?? 'local-webhook-secret-change-before-deploy',
       )
-        .update(`${match[1]}.${raw.toString('utf8')}`)
+        .update(`${signedAt}.${raw.toString('utf8')}`)
         .digest('hex');
-      if (!safeEqual(match[2]!, expected)) {
+      if (!safeEqual(digest, expected)) {
         return reply.code(401).send({ error: 'Webhook signature is invalid.' });
       }
       const payload = JSON.parse(raw.toString('utf8')) as {

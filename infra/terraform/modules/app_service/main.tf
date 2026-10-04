@@ -17,7 +17,7 @@ locals {
     PGHOST                                = var.postgres_fqdn
     PGDATABASE                            = var.postgres_database_name
     PGSSLMODE                             = "require"
-    PGUSER                                = var.name # The PostgreSQL Entra principal uses the web app name.
+    PGUSER                                = var.name
     SESSION_SECRET                        = "@Microsoft.KeyVault(VaultName=${var.key_vault_name};SecretName=session-secret)"
     OIDC_CLIENT_SECRET                    = "@Microsoft.KeyVault(VaultName=${var.key_vault_name};SecretName=oidc-client-secret)"
     OIDC_CLIENT_ID                        = var.oidc_client_id

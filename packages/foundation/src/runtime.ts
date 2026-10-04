@@ -64,10 +64,6 @@ export interface ApprovalCreateInput {
   summary?: Record<string, unknown>;
 }
 
-export type RouteHandler<Params = unknown, Query = unknown, Body = unknown> = (
-  context: FoundationContext<Params, Query, Body>,
-) => unknown | Promise<unknown>;
-
 export type FoundationRoute<
   Params = unknown,
   Query = unknown,
@@ -105,7 +101,7 @@ export interface OutboxHandlerResult {
 
 export interface ToolRegistration {
   tool: ToolDefinition;
-  routes: FoundationRoute<any, any, any>[];
+  routes: FoundationRoute[];
   approvalHandlers?: Record<string, ApprovalHandler>;
   outboxHandlers?: Record<
     string,
@@ -137,11 +133,28 @@ export interface RouteResponse {
 
 const states = new WeakMap<FastifyInstance, RuntimeState>();
 
-function statusError(
-  message: string,
-  statusCode: number,
-): Error & { statusCode: number } {
-  return Object.assign(new Error(message), { statusCode });
+export class HttpError extends Error {
+  constructor(
+    message: string,
+    readonly statusCode: number,
+  ) {
+    super(message);
+    this.name = 'HttpError';
+  }
+}
+
+const genericFailureMessage = 'The request could not be completed. Try again.';
+
+function sendRouteError(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  error: unknown,
+) {
+  if (error instanceof HttpError) {
+    return reply.code(error.statusCode).send({ error: error.message });
+  }
+  request.log.error({ err: error }, 'Foundation route failed');
+  return reply.code(500).send({ error: genericFailureMessage });
 }
 
 async function transaction<T>(
@@ -180,7 +193,6 @@ function routeResponse(value: unknown): RouteResponse {
 }
 
 function buildContext(
-  state: RuntimeState,
   request: FastifyRequest,
   client: pg.PoolClient,
   registration: ToolRegistration,
@@ -243,6 +255,39 @@ function buildContext(
   };
 }
 
+const permissionDeniedMessage =
+  'You do not have permission to perform this action.';
+
+async function auditPermissionDenial(
+  state: RuntimeState,
+  request: FastifyRequest,
+  tool: ToolDefinition,
+  user: FoundationUser,
+  permission: string,
+) {
+  try {
+    await transaction(state.pool, (client) =>
+      appendAudit(client, {
+        toolId: tool.id,
+        actorId: user.id,
+        actorRoles: user.roles,
+        action: 'permission.denied',
+        objectType: 'permission',
+        objectId: permission,
+        result: 'denied',
+        requestId: request.id,
+        sourceIp: request.ip,
+        userAgent: request.headers['user-agent'],
+      }),
+    );
+  } catch (error) {
+    request.log.error(
+      { error },
+      'Could not write authorization denial audit event',
+    );
+  }
+}
+
 async function authorizeRequest(
   state: RuntimeState,
   request: FastifyRequest,
@@ -256,30 +301,8 @@ async function authorizeRequest(
     return undefined;
   }
   if (!authorize(user, permission, tool)) {
-    try {
-      await transaction(state.pool, (client) =>
-        appendAudit(client, {
-          toolId: tool.id,
-          actorId: user.id,
-          actorRoles: user.roles,
-          action: 'permission.denied',
-          objectType: 'permission',
-          objectId: permission,
-          result: 'denied',
-          requestId: request.id,
-          sourceIp: request.ip,
-          userAgent: request.headers['user-agent'],
-        }),
-      );
-    } catch (error) {
-      request.log.error(
-        { error },
-        'Could not write authorization denial audit event',
-      );
-    }
-    reply
-      .code(403)
-      .send({ error: 'You do not have permission to perform this action.' });
+    await auditPermissionDenial(state, request, tool, user, permission);
+    reply.code(403).send({ error: permissionDeniedMessage });
     return undefined;
   }
   return user;
@@ -315,30 +338,14 @@ async function runRegisteredRoute(
   }
 
   if (!authorize(user, route.permission, registration.tool)) {
-    try {
-      await transaction(state.pool, (client) =>
-        appendAudit(client, {
-          toolId: registration.tool.id,
-          actorId: user.id,
-          actorRoles: user.roles,
-          action: 'permission.denied',
-          objectType: 'permission',
-          objectId: route.permission,
-          result: 'denied',
-          requestId: request.id,
-          sourceIp: request.ip,
-          userAgent: request.headers['user-agent'],
-        }),
-      );
-    } catch (error) {
-      request.log.error(
-        { error },
-        'Could not write authorization denial audit event',
-      );
-    }
-    return reply
-      .code(403)
-      .send({ error: 'You do not have permission to perform this action.' });
+    await auditPermissionDenial(
+      state,
+      request,
+      registration.tool,
+      user,
+      route.permission,
+    );
+    return reply.code(403).send({ error: permissionDeniedMessage });
   }
 
   const parsed = {
@@ -354,7 +361,7 @@ async function runRegisteredRoute(
         if (route.idempotent) {
           const key = request.headers['idempotency-key'];
           if (typeof key !== 'string' || !key.trim()) {
-            throw statusError('An Idempotency-Key header is required.', 400);
+            throw new HttpError('An Idempotency-Key header is required.', 400);
           }
           const inputHash = requestHash(parsed);
           const routeKey = `${route.method} ${route.path}`;
@@ -378,7 +385,7 @@ async function runRegisteredRoute(
                 record?.response_code !== undefined,
             );
             if (checked.action === 'conflict') {
-              throw statusError(
+              throw new HttpError(
                 'This request key was used with different details.',
                 422,
               );
@@ -389,7 +396,7 @@ async function runRegisteredRoute(
                 body: record.response_body,
               };
             }
-            throw statusError(
+            throw new HttpError(
               'This request is still being processed. Try again shortly.',
               409,
             );
@@ -397,7 +404,6 @@ async function runRegisteredRoute(
           idempotency = { key };
         }
         const context = buildContext(
-          state,
           request,
           client,
           registration,
@@ -410,7 +416,7 @@ async function runRegisteredRoute(
           auditEvents += 1;
           return writeAudit(event);
         };
-        const response = routeResponse(await route.handler(context as never));
+        const response = routeResponse(await route.handler(context));
         if (
           route.method !== 'GET' &&
           response.statusCode < 400 &&
@@ -443,13 +449,7 @@ async function runRegisteredRoute(
     }
     return reply.send(result.body);
   } catch (error) {
-    const cause = error as Error & { statusCode?: number };
-    request.log.error({ err: error }, 'Foundation route failed');
-    return reply.code(cause.statusCode ?? 500).send({
-      error: cause.statusCode
-        ? cause.message
-        : 'The request could not be completed. Try again.',
-    });
+    return sendRouteError(request, reply, error);
   }
 }
 
@@ -481,7 +481,7 @@ function approvalContext(
   registration: ToolRegistration,
   user: FoundationUser,
 ): FoundationContext {
-  return buildContext(state, request, client, registration, user, {
+  return buildContext(request, client, registration, user, {
     params: {},
     query: {},
     body: {},
@@ -591,10 +591,10 @@ function registerApprovalRoutes(app: FastifyInstance, state: RuntimeState) {
         const approval = locked.rows[0] as
           (ApprovalRequestRecord & { expired: boolean }) | undefined;
         if (!approval || approval.status !== 'pending') {
-          throw statusError('This approval is no longer open.', 409);
+          throw new HttpError('This approval is no longer open.', 409);
         }
         if (approval.expired) {
-          throw statusError('This approval has expired.', 409);
+          throw new HttpError('This approval has expired.', 409);
         }
         if (approval.requester_id === authorized.id) {
           await appendAudit(client, {
@@ -617,7 +617,7 @@ function registerApprovalRoutes(app: FastifyInstance, state: RuntimeState) {
           authorized.roles.includes(candidate),
         );
         if (!step || !role) {
-          throw statusError(
+          throw new HttpError(
             'Your role is not allowed for this approval step.',
             403,
           );
@@ -627,17 +627,20 @@ function registerApprovalRoutes(app: FastifyInstance, state: RuntimeState) {
             .slice(0, stepIndex)
             .some((previous) => previous.approvals.length === 0)
         ) {
-          throw statusError('Complete the earlier approval steps first.', 409);
+          throw new HttpError(
+            'Complete the earlier approval steps first.',
+            409,
+          );
         }
         if (
           steps.some((item) =>
             item.approvals.some((entry) => entry.userId === authorized.id),
           )
         ) {
-          throw statusError('You have already approved this request.', 409);
+          throw new HttpError('You have already approved this request.', 409);
         }
         if (step.approvals.length) {
-          throw statusError('This approval step is already complete.', 409);
+          throw new HttpError('This approval step is already complete.', 409);
         }
         await client.query(
           `INSERT INTO foundation.approvals(
@@ -707,8 +710,7 @@ function registerApprovalRoutes(app: FastifyInstance, state: RuntimeState) {
       }
       return { status: result.status };
     } catch (error) {
-      const cause = error as Error & { statusCode?: number };
-      return reply.code(cause.statusCode ?? 400).send({ error: cause.message });
+      return sendRouteError(request, reply, error);
     }
   };
 

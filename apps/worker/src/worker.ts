@@ -1,8 +1,5 @@
 import pg from 'pg';
-import {
-  retryDelayMs,
-  type ToolRegistration,
-} from '@internal-tools/foundation';
+import { retryDelayMs } from '@internal-tools/foundation';
 import { buildWorkerRegistry } from './tool-registry.js';
 
 const pool = new pg.Pool({

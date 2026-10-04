@@ -1,8 +1,8 @@
 import {
   defineRoute,
+  HttpError,
   requestHash,
   type FoundationContext,
-  type FoundationRoute,
   type ToolRegistration,
 } from '@internal-tools/foundation';
 import { randomUUID } from 'node:crypto';
@@ -67,7 +67,7 @@ const ExceptionInput = z.object({
 
 const IdParams = z.object({ id: z.string().min(1).max(128) });
 function fail(message: string, statusCode = 400): never {
-  throw Object.assign(new Error(message), { statusCode });
+  throw new HttpError(message, statusCode);
 }
 
 const RefundListQuery = z.object({
@@ -112,8 +112,7 @@ const routes = [
     permission: 'charge.search',
     query: ChargeQuery,
     handler: async ({ tx, query, mask }) => {
-      const { q, from, to, minMinor, maxMinor, sort, limit, cursor } =
-        query as z.infer<typeof ChargeQuery>;
+      const { q, from, to, minMinor, maxMinor, sort, limit, cursor } = query;
       const byAmount = sort.startsWith('amount');
       const direction = sort.endsWith('asc') ? 'ASC' : 'DESC';
       const sortColumn = byAmount ? 'amount_minor::bigint' : 'created_at';
@@ -188,8 +187,8 @@ const routes = [
     params: IdParams,
     body: RevealInput,
     handler: async ({ tx, params, body, audit }) => {
-      const { id } = params as z.infer<typeof IdParams>;
-      const { reason } = body as z.infer<typeof RevealInput>;
+      const { id } = params;
+      const { reason } = body;
       const result = await tx.query(
         'SELECT customer_email FROM refunds.charges WHERE id=$1',
         [id],
@@ -211,7 +210,7 @@ const routes = [
     permission: 'charge.search',
     params: IdParams,
     handler: async ({ tx, params, mask }) => {
-      const { id } = params as z.infer<typeof IdParams>;
+      const { id } = params;
       const result = await tx.query(
         `SELECT id,customer_id,customer_email,card_brand,card_last4,amount_minor::text,
                 currency,refunded_minor::text,created_at
@@ -244,7 +243,7 @@ const routes = [
     body: RefundInput,
     idempotent: true,
     handler: async (context) => {
-      const input = context.body as z.infer<typeof RefundInput>;
+      const input = context.body;
       const { user, tx, approvals, outbox, audit } = context;
       const locked = await tx.query(
         `SELECT id,amount_minor::text,refunded_minor::text,currency
@@ -358,7 +357,7 @@ const routes = [
     permission: 'refund.read',
     query: RefundListQuery,
     handler: async ({ tx, query, user, audit }) => {
-      const { format, status } = query as z.infer<typeof RefundListQuery>;
+      const { format, status } = query;
       if (format === 'csv') {
         if (!mayExport(user)) {
           return {
@@ -421,7 +420,7 @@ const routes = [
     permission: 'refund.read',
     params: IdParams,
     handler: async ({ tx, params, user }) => {
-      const { id } = params as z.infer<typeof IdParams>;
+      const { id } = params;
       const result = await tx.query(
         `SELECT r.*,r.amount_minor::text FROM refunds.refunds r
          WHERE r.id=$1 AND ($2::boolean OR r.requester_id=$3)`,
@@ -467,7 +466,7 @@ const routes = [
     permission: 'exception.resolve',
     query: z.object({ status: z.enum(['open', 'resolved']).optional() }),
     handler: async ({ tx, query }) => {
-      const status = (query as { status?: string }).status ?? 'open';
+      const status = query.status ?? 'open';
       const result = await tx.query(
         `SELECT * FROM refunds.reconciliation_exceptions
          WHERE status=$1 ORDER BY created_at ASC LIMIT 100`,
@@ -483,8 +482,8 @@ const routes = [
     params: IdParams,
     body: ExceptionInput,
     handler: async ({ tx, params, body, user, audit }) => {
-      const { id } = params as z.infer<typeof IdParams>;
-      const input = body as z.infer<typeof ExceptionInput>;
+      const { id } = params;
+      const input = body;
       const before = await tx.query(
         'SELECT status FROM refunds.reconciliation_exceptions WHERE id=$1 FOR UPDATE',
         [id],
@@ -522,20 +521,18 @@ const routes = [
     path: '/api/dashboard',
     permission: 'dashboard.read',
     handler: async ({ tx }) => {
-      const [states, approvals, exceptions, setting] = await Promise.all([
-        tx.query(
-          'SELECT status,count(*)::int AS count FROM refunds.refunds GROUP BY status',
-        ),
-        tx.query(
-          "SELECT count(*)::int AS count FROM foundation.approval_requests WHERE status='pending'",
-        ),
-        tx.query(
-          "SELECT count(*)::int AS count FROM refunds.reconciliation_exceptions WHERE status='open'",
-        ),
-        tx.query(
-          "SELECT execution_paused FROM foundation.tool_settings WHERE tool_id='refunds'",
-        ),
-      ]);
+      const states = await tx.query(
+        'SELECT status,count(*)::int AS count FROM refunds.refunds GROUP BY status',
+      );
+      const approvals = await tx.query(
+        "SELECT count(*)::int AS count FROM foundation.approval_requests WHERE status='pending'",
+      );
+      const exceptions = await tx.query(
+        "SELECT count(*)::int AS count FROM refunds.reconciliation_exceptions WHERE status='open'",
+      );
+      const setting = await tx.query(
+        "SELECT execution_paused FROM foundation.tool_settings WHERE tool_id='refunds'",
+      );
       return {
         states: states.rows,
         pendingApprovals: approvals.rows[0]?.count ?? 0,
@@ -550,7 +547,7 @@ const routes = [
     permission: 'execution.pause',
     body: z.object({ paused: z.boolean() }),
     handler: async ({ tx, user, body, audit }) => {
-      const { paused } = body as { paused: boolean };
+      const { paused } = body;
       await tx.query(
         `UPDATE foundation.tool_settings
          SET execution_paused=$1,changed_by=$2,changed_at=now()
@@ -566,7 +563,7 @@ const routes = [
       return { paused };
     },
   }),
-] satisfies FoundationRoute<any, any, any>[];
+];
 
 const approvalHandlers: ToolRegistration['approvalHandlers'] = {
   'refund.execute': async (context, approval, decision) => {

@@ -26,7 +26,7 @@ resource "azurerm_linux_web_app" "main" {
     PGHOST                                = var.postgres_fqdn
     PGDATABASE                            = var.postgres_database_name
     PGSSLMODE                             = "require"
-    PGUSER                                = var.name # The PostgreSQL Entra principal uses the worker app name.
+    PGUSER                                = var.name
   }
 
   identity {
@@ -41,7 +41,7 @@ resource "azurerm_linux_web_app" "main" {
     http2_enabled                           = true
     vnet_route_all_enabled                  = true
     app_command_line                        = var.worker_command
-    health_check_path                       = "/healthz" # The worker must listen on WEBSITES_PORT and answer /healthz for App Service probes.
+    health_check_path                       = "/healthz"
     health_check_eviction_time_in_min       = 5
     ip_restriction_default_action           = "Deny"
     scm_ip_restriction_default_action       = "Deny"

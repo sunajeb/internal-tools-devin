@@ -92,7 +92,9 @@ export function decimalToMinor(
 export const money = (minor: string | number | bigint, currency = 'USD') => {
   const decimal = minorToDecimal(minor, currency);
   if (!decimal) return '—';
-  return currencyFormatter(currency).format(decimal as unknown as number);
+  return currencyFormatter(currency).format(
+    decimal as Intl.StringNumericLiteral,
+  );
 };
 
 export const dateTime = (value: string) =>

@@ -119,8 +119,9 @@ class StripeTestProvider implements PaymentProvider {
           status: stripeRefundStatus(refund.status),
         });
       }
-      if (!page.has_more || !page.data.length) break;
-      startingAfter = page.data[page.data.length - 1]!.id;
+      const lastRefund = page.data.at(-1);
+      if (!page.has_more || !lastRefund) break;
+      startingAfter = lastRefund.id;
     }
     return results;
   }

@@ -48,7 +48,7 @@ await write(
     type: 'module',
     main: './src/index.ts',
     types: './src/index.ts',
-    exports: { '.': './src/index.ts', './web': './src/web.tsx' },
+    exports: { '.': './src/index.ts', './web': './src/web/index.tsx' },
     dependencies: {
       '@internal-tools/foundation': '*',
       '@internal-tools/ui-kit': '*',
@@ -157,7 +157,7 @@ export {
 `,
 );
 await write(
-  'src/web.tsx',
+  'src/web/index.tsx',
   `import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Route, Routes } from 'react-router-dom';

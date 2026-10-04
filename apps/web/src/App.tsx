@@ -43,8 +43,8 @@ function App() {
       </main>
     );
   }
-  if (!session?.authenticated) return <SignIn />;
-  return <Shell session={session} />;
+  if (!session?.authenticated || !session.user) return <SignIn />;
+  return <Shell session={session} user={session.user} />;
 }
 
 function SignIn() {
@@ -85,12 +85,21 @@ function SignIn() {
   );
 }
 
-function Shell({ session }: { session: Session }) {
+const toolLinks = webToolRegistry.flatMap((tool) => tool.navigation);
+function registryDefaults() {
+  const [tool] = webToolRegistry;
+  const [link] = toolLinks;
+  if (!tool || !link) {
+    throw new Error('The web tool registry has no navigation links.');
+  }
+  return { defaultTool: tool, defaultLink: link };
+}
+const { defaultTool, defaultLink } = registryDefaults();
+
+function Shell({ session, user }: { session: Session; user: User }) {
   const location = useLocation();
   const queryClient = useQueryClient();
-  const user = session.user!;
-  const allLinks = webToolRegistry.flatMap((tool) => tool.navigation);
-  const visibleLinks = allLinks.filter((item) =>
+  const visibleLinks = toolLinks.filter((item) =>
     item.roles.some((role) => user.roles.includes(role)),
   );
   const matchesPath = (to: string) =>
@@ -102,17 +111,15 @@ function Shell({ session }: { session: Session }) {
       .filter((item) => matchesPath(item.to))
       .sort((a, b) => b.to.length - a.to.length)[0] ??
     visibleLinks[0] ??
-    allLinks[0]!;
+    defaultLink;
   const landingRedirect =
-    location.pathname === '/' &&
-    visibleLinks.length > 0 &&
-    !visibleLinks.some((item) => item.to === '/')
-      ? visibleLinks[0]!.to
+    location.pathname === '/' && !visibleLinks.some((item) => item.to === '/')
+      ? visibleLinks[0]?.to
       : undefined;
   const activeTool =
     webToolRegistry.find((tool) =>
       tool.navigation.some((item) => item.to === active.to),
-    ) ?? webToolRegistry[0]!;
+    ) ?? defaultTool;
   useEffect(() => {
     document.title = `${active.label} · ${activeTool.name} · Ledgerline`;
   }, [active.label, activeTool.name]);
