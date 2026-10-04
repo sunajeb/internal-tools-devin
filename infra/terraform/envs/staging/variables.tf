@@ -64,7 +64,7 @@ variable "image" {
 
 variable "worker_command" {
   type    = string
-  default = "node dist/worker.js"
+  default = "npm run start -w @internal-tools/worker"
 }
 
 variable "websites_port" {

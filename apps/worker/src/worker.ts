@@ -1,13 +1,9 @@
 import pg from 'pg';
-import { retryDelayMs } from '@internal-tools/foundation';
+import { createServer } from 'node:http';
+import { databaseConfig, retryDelayMs } from '@internal-tools/foundation';
 import { buildWorkerRegistry } from './tool-registry.js';
 
-const pool = new pg.Pool({
-  connectionString:
-    process.env.DATABASE_URL ??
-    'postgres://tools:tools@localhost:5432/internal_tools',
-  max: 8,
-});
+const pool = new pg.Pool({ ...databaseConfig(), max: 8 });
 const registrations = buildWorkerRegistry(pool);
 const registrationsById = new Map(
   registrations.map((registration) => [registration.tool.id, registration]),
@@ -178,8 +174,19 @@ async function loop() {
 
 void loop();
 
+const healthServer = process.env.PORT
+  ? createServer((request, response) => {
+      const live = request.url === '/health/live';
+      response.writeHead(live ? 200 : 404, {
+        'content-type': 'application/json',
+      });
+      response.end(JSON.stringify({ status: live ? 'ok' : 'not_found' }));
+    }).listen(Number(process.env.PORT))
+  : undefined;
+
 const stop = async () => {
   stopping = true;
+  healthServer?.close();
   await pool.end();
   process.exit(0);
 };
