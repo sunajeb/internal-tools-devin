@@ -3,7 +3,7 @@ import type { LightMyRequestResponse } from 'fastify';
 import pg from 'pg';
 import { buildServer } from '../src/server.js';
 
-export const sessionSecret = 'security-test-session-secret';
+const sessionSecret = 'security-test-session-secret';
 export const webhookSecret = 'security-test-webhook-secret';
 
 const ownerUrl =
@@ -35,7 +35,7 @@ export interface Persona {
   remoteAddress: string;
 }
 
-export interface SendOptions {
+interface SendOptions {
   body?: unknown;
   headers?: Record<string, string>;
   cookie?: string;

@@ -16,8 +16,7 @@ locals {
     worker = {
       name             = "${var.name}-worker"
       address_prefixes = [var.worker_prefix]
-      # Each App Service plan can integrate with only one subnet.
-      delegation = "Microsoft.Web/serverFarms"
+      delegation       = "Microsoft.Web/serverFarms"
     }
     private_endpoints = {
       name             = "${var.name}-private-endpoints"

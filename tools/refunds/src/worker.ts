@@ -397,8 +397,6 @@ async function processWebhooks(pool: pg.Pool) {
            WHERE id::text=$1 OR provider_refund_id=$1 LIMIT 1`,
           [refundId],
         );
-        // Only an executing refund has a provider call in flight. Other
-        // states ignore the event; reconciliation reports any difference.
         if (found.rows[0]?.status === 'executing') {
           await updateRefundStatus(
             pool,

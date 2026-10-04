@@ -54,7 +54,6 @@ resource "terraform_data" "secret_writer_role" {
   input = var.secret_writer_role_assignment_id
 }
 
-# The secret expires with its rotating Entra application password.
 #trivy:ignore:AZU-0017
 resource "azurerm_key_vault_secret" "oidc_client_secret" {
   name            = "oidc-client-secret"

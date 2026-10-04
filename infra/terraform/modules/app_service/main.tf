@@ -25,7 +25,6 @@ locals {
   }
 }
 
-# Front Door cannot present client certificates, and the Node service implements Entra OIDC itself.
 #trivy:ignore:AZU-0001
 #trivy:ignore:AZU-0003
 resource "azurerm_linux_web_app" "main" {
@@ -100,7 +99,6 @@ resource "azurerm_linux_web_app" "main" {
   tags = var.tags
 }
 
-# The staging slot uses the same Front Door and application-managed OIDC controls as production.
 #trivy:ignore:AZU-0001
 #trivy:ignore:AZU-0003
 resource "azurerm_linux_web_app_slot" "staging" {
@@ -110,7 +108,6 @@ resource "azurerm_linux_web_app_slot" "staging" {
   public_network_access_enabled = true
   virtual_network_subnet_id     = var.app_integration_subnet_id
   client_affinity_enabled       = false
-  # Each slot has its own managed identity. Verify the principal name in Entra ID before you create the PostgreSQL role.
   app_settings = merge(local.app_settings, {
     PGUSER = "${var.name}/slots/staging"
   })
@@ -170,7 +167,6 @@ resource "azurerm_linux_web_app_slot" "staging" {
   }
 
   tags = var.tags
-  # Deploy to staging, warm via /healthz, then swap for zero downtime.
 }
 
 resource "azurerm_role_assignment" "acr_pull_web" {

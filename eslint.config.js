@@ -11,7 +11,6 @@ export default [
       parserOptions: {
         projectService: {
           allowDefaultProject: [
-            'apps/api/drizzle.config.ts',
             'apps/web/vite.config.ts',
             'scripts/new-tool.ts',
             'vitest.config.ts',
