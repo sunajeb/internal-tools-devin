@@ -1,6 +1,2 @@
-export { kycTool, kycTool as tool } from './registry.js';
-export {
-  kycRegistration,
-  kycRegistration as registration,
-  kycRoutes,
-} from './api.js';
+export { kycTool as tool } from './registry.js';
+export { kycRegistration as registration } from './api.js';

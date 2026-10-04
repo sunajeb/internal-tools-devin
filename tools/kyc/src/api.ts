@@ -11,7 +11,7 @@ import {
 import { z } from 'zod';
 import { kycHighRiskThreshold, kycTool } from './registry.js';
 
-export const caseStatuses = [
+const caseStatuses = [
   'new',
   'in_review',
   'escalated',
@@ -20,7 +20,7 @@ export const caseStatuses = [
 ] as const;
 export type CaseStatus = (typeof caseStatuses)[number];
 
-export const piiFields = {
+const piiFields = {
   customer_name: 'confidential',
   date_of_birth: 'confidential',
   national_id: 'restricted',
@@ -34,7 +34,7 @@ const sortColumns = {
 } as const;
 type SortKey = keyof typeof sortColumns;
 
-export const riskBands = {
+const riskBands = {
   low: [0, 39],
   medium: [40, 69],
   high: [kycHighRiskThreshold, 100],
@@ -106,7 +106,7 @@ function statusError(message: string, statusCode: number): never {
   throw Object.assign(new Error(message), { statusCode });
 }
 
-export function riskBand(score: number): keyof typeof riskBands {
+function riskBand(score: number): keyof typeof riskBands {
   if (score >= riskBands.high[0]) return 'high';
   if (score >= riskBands.medium[0]) return 'medium';
   return 'low';
@@ -133,7 +133,7 @@ function present(row: CaseRow, mask: Context['mask']) {
   };
 }
 
-export function encodeCursor(value: string | number, id: string): string {
+function encodeCursor(value: string | number, id: string): string {
   return Buffer.from(JSON.stringify([value, id])).toString('base64url');
 }
 
@@ -149,9 +149,7 @@ function decodeCursor(cursor: string, sort: SortKey) {
         ? typeof value === 'number' && Number.isInteger(value)
         : typeof value === 'string' && !Number.isNaN(Date.parse(value));
     if (validId && validValue) return { value, id };
-  } catch {
-    // An invalid token gets the same answer as a malformed one.
-  }
+  } catch {}
   return statusError('The page token is not valid.', 400);
 }
 
@@ -594,7 +592,7 @@ export const kycRoutes = [
   }),
 ];
 
-export const decideCaseApproval: ApprovalHandler = async (
+const decideCaseApproval: ApprovalHandler = async (
   context,
   approval,
   decision,

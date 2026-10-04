@@ -1,4 +1,3 @@
--- Synthetic KYC cases for local development. Safe to run more than once.
 WITH params AS (
   SELECT
     ARRAY['Avery','Blake','Casey','Devon','Emery','Finley','Harper','Jordan','Kai','Logan',

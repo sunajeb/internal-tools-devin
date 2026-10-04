@@ -112,7 +112,7 @@ const piiLabels: Record<PiiField, string> = {
 };
 const workerRoles = ['kyc_analyst', 'kyc_lead'];
 
-export const kycNavigation = [
+const kycNavigation = [
   {
     to: '/tools/kyc',
     label: 'KYC queue',
@@ -130,7 +130,7 @@ export const kycNavigation = [
 const hasRole = (user: User, roles: string[]) =>
   roles.some((role) => user.roles.includes(role));
 
-export function KycPages({ user }: { user: User }) {
+function KycPages({ user }: { user: User }) {
   if (!hasRole(user, kycNavigation[0]!.roles)) return <AccessDenied />;
   return (
     <Routes>
@@ -981,7 +981,7 @@ function AccessDenied() {
   );
 }
 
-export const kycWebTool = {
+export const tool = {
   id: 'kyc',
   name: 'KYC Review Queue',
   description: 'Customer due diligence',
@@ -990,6 +990,3 @@ export const kycWebTool = {
   navigation: kycNavigation,
   Pages: KycPages,
 };
-
-export const tool = kycWebTool;
-export default KycPages;
