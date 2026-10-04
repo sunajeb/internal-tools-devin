@@ -25,7 +25,7 @@ resource "azurerm_cdn_frontdoor_origin_group" "main" {
 
   health_probe {
     protocol            = "Https"
-    path                = "/healthz"
+    path                = "/health/ready"
     request_type        = "GET"
     interval_in_seconds = 30
   }

@@ -1,10 +1,9 @@
 import pg from 'pg';
+import { databaseConfig } from '@internal-tools/foundation';
 
 const { Pool } = pg;
 export const pool = new Pool({
-  connectionString:
-    process.env.DATABASE_URL ??
-    'postgres://tools:tools@localhost:5432/internal_tools',
+  ...databaseConfig(),
   max: 20,
   statement_timeout: 5_000,
 });

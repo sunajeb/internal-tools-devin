@@ -14,14 +14,19 @@ locals {
     WEBSITES_PORT                         = tostring(var.websites_port)
     APPLICATIONINSIGHTS_CONNECTION_STRING = var.application_insights_connection_string
     NODE_ENV                              = "production"
+    PORT                                  = tostring(var.websites_port)
+    APP_ENV                               = var.app_environment
     PGHOST                                = var.postgres_fqdn
+    PGPORT                                = "5432"
     PGDATABASE                            = var.postgres_database_name
     PGSSLMODE                             = "require"
-    PGUSER                                = var.name # The PostgreSQL Entra principal uses the web app name.
+    PGUSER                                = var.name
     SESSION_SECRET                        = "@Microsoft.KeyVault(VaultName=${var.key_vault_name};SecretName=session-secret)"
+    WEBHOOK_SECRET                        = "@Microsoft.KeyVault(VaultName=${var.key_vault_name};SecretName=webhook-secret)"
     OIDC_CLIENT_SECRET                    = "@Microsoft.KeyVault(VaultName=${var.key_vault_name};SecretName=oidc-client-secret)"
     OIDC_CLIENT_ID                        = var.oidc_client_id
     OIDC_ISSUER                           = var.oidc_issuer
+    OIDC_REDIRECT_URI                     = var.oidc_redirect_uri
   }
 }
 
@@ -53,7 +58,7 @@ resource "azurerm_linux_web_app" "main" {
     ftps_state                              = "Disabled"
     http2_enabled                           = true
     vnet_route_all_enabled                  = true
-    health_check_path                       = "/healthz"
+    health_check_path                       = "/health/live"
     health_check_eviction_time_in_min       = 5
     container_registry_use_managed_identity = true
     application_stack {
@@ -123,7 +128,7 @@ resource "azurerm_linux_web_app_slot" "staging" {
     ftps_state                              = "Disabled"
     http2_enabled                           = true
     vnet_route_all_enabled                  = true
-    health_check_path                       = "/healthz"
+    health_check_path                       = "/health/live"
     health_check_eviction_time_in_min       = 5
     container_registry_use_managed_identity = true
     application_stack {
