@@ -1,0 +1,38 @@
+.flag-env-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.flag-env {
+  padding: 18px;
+}
+.flag-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.flag-detail-list {
+  grid-template-columns: 1fr;
+}
+.flag-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.flag-reason {
+  width: 100%;
+  min-height: 70px;
+  padding: 9px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+  resize: vertical;
+}
+.flag-reason:focus-visible {
+  border-color: var(--blue);
+  outline: 1px solid var(--blue);
+  outline-offset: 0;
+}

@@ -5,6 +5,7 @@
     { "path": "./packages/testing" },
     { "path": "./packages/ui-kit" },
     { "path": "./tools/refunds" },
+    { "path": "./tools/feature-flags" },
     { "path": "./apps/api" },
     { "path": "./apps/api/test" },
     { "path": "./apps/worker" },

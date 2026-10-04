@@ -3,7 +3,8 @@
   "compilerOptions": { "rootDir": "src", "outDir": "dist", "composite": true },
   "references": [
     { "path": "../../packages/foundation" },
-    { "path": "../../tools/refunds" }
+    { "path": "../../tools/refunds" },
+    { "path": "../../tools/feature-flags" }
   ],
   "include": ["src/**/*.ts"]
 }

@@ -17,6 +17,11 @@ const accounts = {
   finance: { username: 'finance', password: 'LocalFinance123!' },
   auditor: { username: 'auditor', password: 'LocalAuditor123!' },
   platformAdmin: { username: 'platform-admin', password: 'LocalPlatform123!' },
+  flagEditor: { username: 'flag-editor', password: 'LocalFlagEditor123!' },
+  flagApprover: {
+    username: 'flag-approver',
+    password: 'LocalFlagApprover123!',
+  },
 } satisfies Record<string, Account>;
 
 async function signIn(page: Page, account: Account) {
@@ -229,5 +234,60 @@ test.describe('accessibility', () => {
     await signIn(page, accounts.platformAdmin);
     await page.waitForLoadState('networkidle');
     await expectNoSeriousViolations(page, testInfo, 'platform-admin-overview');
+  });
+
+  test('flag editor: list, empty search, detail, invalid input', async ({
+    page,
+  }, testInfo) => {
+    await signIn(page, accounts.flagEditor);
+    await openPage(page, 'Feature flags', /^feature flags$/i);
+    const search = page.getByRole('searchbox', { name: 'Search flags' });
+    await expect(
+      page.getByRole('link', { name: 'dashboard.dark_mode' }),
+    ).toBeVisible();
+    await expectNoSeriousViolations(page, testInfo, 'flags-list');
+
+    await search.fill('zzz-no-match');
+    await expect(page.getByText(/no flags found/i)).toBeVisible();
+    await expectNoSeriousViolations(page, testInfo, 'flags-list-empty');
+
+    await search.fill('dark');
+    await page.getByRole('link', { name: 'dashboard.dark_mode' }).click();
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'dashboard.dark_mode' }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('table', { name: 'Change history' }),
+    ).toBeVisible();
+    await page.waitForLoadState('networkidle');
+    await expectNoSeriousViolations(page, testInfo, 'flags-detail');
+
+    const rollout = page.getByLabel('Rollout percent for production');
+    await rollout.fill('101');
+    await page
+      .getByRole('button', { name: 'Request production change' })
+      .click();
+    await expect(rollout).toBeFocused();
+    await expectNoSeriousViolations(page, testInfo, 'flags-detail-invalid');
+  });
+
+  test('flag approver: approvals inbox', async ({ page }, testInfo) => {
+    await signIn(page, accounts.flagApprover);
+    await openPage(page, 'Flag approvals', /production approvals/i);
+    await expect(
+      page.getByRole('region', { name: 'Approval inbox' }),
+    ).toBeVisible();
+    await expectNoSeriousViolations(page, testInfo, 'flags-approvals');
+  });
+
+  test('auditor: read-only flag detail', async ({ page }, testInfo) => {
+    await signIn(page, accounts.auditor);
+    await page.goto('/tools/feature-flags/flags/dashboard.dark_mode');
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'dashboard.dark_mode' }),
+    ).toBeVisible();
+    await expect(page.getByLabel('Rollout percent for staging')).toBeDisabled();
+    await page.waitForLoadState('networkidle');
+    await expectNoSeriousViolations(page, testInfo, 'flags-auditor-detail');
   });
 });

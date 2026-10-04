@@ -1,5 +1,6 @@
 const toolModules = await Promise.all([
   import('@internal-tools/refunds'),
+  import('@internal-tools/feature-flags'),
   // <DEVIN-API-TOOL-REGISTRY>
 ]);
 
