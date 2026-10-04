@@ -65,7 +65,8 @@ The C4 test passed on the base commit because it compares the stored version wit
 - Test: `C2 concurrency: 20 parallel requests never refund more than the charge`.
 - Result: Pass.
 - Evidence:
-  - 20 parallel requests of 150000 against a charge of 1000000 give 6 × HTTP 201 and 14 × HTTP 409.
+  - A supervisor sends 20 parallel requests of 150000 against a charge of 1000000. The result is 6 × HTTP 201 and 14 × HTTP 409.
+  - The requester is a supervisor because the tier uses the total refund for the charge (SR-02 in `docs/security-review.md`). After 500000, the tier is `dual`, and only a supervisor can request it.
   - `refunded_minor` is 900000. The sum of active refunds is also 900000.
   - The `CHECK (refunded_minor <= amount_minor)` constraint rejects an over-refund when the owner disables triggers (`session_replication_role = replica`).
   - The `guard_charge_reservation` trigger rejects an over-refund from `app_runtime`.
@@ -77,6 +78,7 @@ The C4 test passed on the base commit because it compares the stored version wit
 - Result: Pass.
 - Evidence:
   - 10 parallel auto-tier requests of 25000 give 8 × HTTP 201 and 2 × HTTP 422.
+  - Each request uses a new charge, because the tier uses the total refund for the charge (SR-02). A second 25000 refund on one charge is in the `supervisor` tier.
   - One more request of 1 returns HTTP 422.
   - `agent_daily_totals.auto_minor` is exactly 200000.
   - A supervisor-tier request (25001) is still accepted. It does not count toward the auto-tier limit.
@@ -87,6 +89,7 @@ The C4 test passed on the base commit because it compares the stored version wit
 - Test: `C4 policy tiers at the boundaries and two different approvers for dual tier`.
 - Result: Pass. The tiers and approvals are correct. The stored policy version was wrong (B1).
 - Evidence:
+  - Each boundary request uses a new charge, because the tier uses the total refund for the charge (SR-02).
   - 25000 is `auto` and `approved`. 25001 and 500000 are `supervisor` and `pending_approval`. 500001 is `dual` with steps `[["supervisor"],["finance"]]`.
   - An agent cannot request a dual-tier refund (HTTP 403).
   - The refund row and the approval request store the registry policy version. The approval expires after 72 hours.
@@ -192,6 +195,10 @@ The C4 test passed on the base commit because it compares the stored version wit
   - `api.ts`: write `refundPolicyVersion` to `policy_version`. Set the approval expiry from `refundPolicy.expiresAfterHours`.
   - `web.tsx`: show `POLICY V3`.
 - Existing rows keep version 1. This is correct because those refunds used the old record.
+- Follow-up fix (Devin Review): `foundation.policy_versions` had only version 1. New refunds cited a version that the policy history did not contain.
+  - `tools/refunds/migrations/001_refund_policy_v3.sql` adds version 3 as `active` and sets older active versions to `retired`. The file is idempotent because the migrate script runs it on each start.
+  - Version 2 never existed in this repository. The system design goes from version 1 to version 3.
+  - Test: `R policy_versions has refund policy version 3 as the only active version`.
 
 ### B2. One webhook that cannot apply blocked all later webhooks
 
@@ -201,6 +208,10 @@ The C4 test passed on the base commit because it compares the stored version wit
   - Apply a webhook only to a refund in `executing` state. Other states ignore the event. Reconciliation reports any difference with the provider.
   - Process each event in its own `try`/`catch`. Write the error to `inbound_events.error`. Skip events that have an error.
   - Record `provider_declined` as the failure code for a `refund.failed` webhook.
+- Follow-up fix (Devin Review): the first fix wrote the error for all failures. A transient database error then dropped the webhook permanently.
+  - The worker now writes the error and skips the event only for permanent PostgreSQL errors: `P0001` (trigger exception), class `22` (data), and class `23` (constraint).
+  - For other errors, the worker keeps the event for the next run, continues with later events, and then reports the first error.
+  - Tests: `keeps an event for retry after a transient error and processes later events` and `records a permanent error, skips the event, and processes later events`.
 
 ### B3. Reconciliation requests used the client request ID as the outbox key
 

@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { refundsTool } from './registry.js';
 import { createPaymentProvider, type PaymentProvider } from './provider.js';
 import { createRefundWorkerRegistration } from './worker.js';
+import { dailyAutoRefundLimitMinor } from './domain.js';
 
 const apiUrl = process.env.INTEGRATION_API_URL ?? 'http://localhost:3000';
 const simulatorUrl =
@@ -566,6 +567,20 @@ describe.skipIf(!stackAvailable)(
     });
 
     it('C5 provider timeout then retry creates exactly one provider refund', async () => {
+      await waitFor(
+        'earlier refund executions to finish',
+        async () =>
+          (
+            await owner.query(
+              `SELECT count(*)::int AS count FROM foundation.outbox o
+               JOIN refunds.refunds r ON r.id::text=o.idempotency_key
+               WHERE o.kind='refund.execute' AND o.status NOT IN ('done','failed')
+                 AND r.requester_id LIKE $1`,
+              [`mc-${run}-%`],
+            )
+          ).rows[0].count as number,
+        (count) => count === 0,
+      );
       await simulatorAdmin('/admin/faults', { fault: 'timeout-then-succeed' });
       const chargeId = await createCharge(100_000);
       const created = await requestRefund(agent, chargeId, 10_000);
@@ -1055,6 +1070,34 @@ describe.skipIf(!stackAvailable)(
       expect(providerCalls).toBe(0);
       expect((await refundRow(pending.body.id)).status).toBe('rejected');
     });
+
+    it('R policy_versions has refund policy version 3 as the only active version', async () => {
+      const policy = refundsTool.approvalRules['refund.execute'] as {
+        version: number;
+        expiresAfterHours: number;
+      };
+      const versions = await owner.query(
+        `SELECT version,state,configuration FROM foundation.policy_versions
+         WHERE tool_id='refunds' ORDER BY version`,
+      );
+      const active = versions.rows.filter((row) => row.state === 'active');
+      expect(active.map((row) => row.version)).toEqual([policy.version]);
+      expect(active[0].configuration).toMatchObject({
+        autoLimitMinor: 25_000,
+        supervisorLimitMinor: 500_000,
+        dailyLimitMinor: Number(dailyAutoRefundLimitMinor),
+        expiresAfterHours: policy.expiresAfterHours,
+      });
+      const known = new Set(versions.rows.map((row) => row.version));
+      const stored = await owner.query(
+        `SELECT DISTINCT policy_version FROM refunds.refunds WHERE requester_id LIKE $1`,
+        [`mc-${run}-%`],
+      );
+      expect(stored.rows.length).toBeGreaterThan(0);
+      for (const row of stored.rows) {
+        expect(known.has(row.policy_version)).toBe(true);
+      }
+    });
   },
 );
 
@@ -1083,5 +1126,58 @@ describe('Refunds approval policy matches the system design', () => {
     expect(tierFor(25_001n)).toBe('supervisor');
     expect(tierFor(500_000n)).toBe('supervisor');
     expect(tierFor(500_001n)).toBe('dual');
+  });
+});
+
+describe('Refunds webhook processing after errors', () => {
+  function webhookRun(lookupError: Error) {
+    const updates: string[] = [];
+    const pool = {
+      query: async (sql: string, params: unknown[] = []) => {
+        if (sql.includes('FROM foundation.inbound_events')) {
+          return {
+            rows: ['1', '2'].map((index) => ({
+              provider: 'simulator',
+              event_id: `evt-${index}`,
+              event_type: 'refund.succeeded',
+              payload: { data: { refundId: `refund-${index}` } },
+            })),
+          };
+        }
+        if (sql.includes('FROM refunds.refunds') && params[0] === 'refund-1') {
+          throw lookupError;
+        }
+        if (sql.includes('UPDATE foundation.inbound_events')) {
+          updates.push(
+            `${sql.includes('error=') ? 'error' : 'processed'}:${String(params[1])}`,
+          );
+        }
+        return { rows: [] };
+      },
+    } as unknown as pg.Pool;
+    const run = createRefundWorkerRegistration(pool, {
+      listRefunds: async () => [],
+      createRefund: async () => ({ id: 'unused', status: 'pending' }),
+    }).reconcilers!['refunds.webhooks']!;
+    return { run, updates };
+  }
+
+  it('keeps an event for retry after a transient error and processes later events', async () => {
+    const { run, updates } = webhookRun(
+      new Error('Connection terminated unexpectedly'),
+    );
+    await expect(run(undefined)).rejects.toThrow(/Connection terminated/);
+    expect(updates).toEqual(['processed:evt-2']);
+  });
+
+  it('records a permanent error, skips the event, and processes later events', async () => {
+    const { run, updates } = webhookRun(
+      Object.assign(
+        new Error('invalid refund transition: approved -> succeeded'),
+        { code: 'P0001' },
+      ),
+    );
+    await run(undefined);
+    expect(updates).toEqual(['error:evt-1', 'processed:evt-2']);
   });
 });
