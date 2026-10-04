@@ -210,7 +210,7 @@ The audit log records `execution paused` and `execution resumed`. The metric `ex
      -d '{"chargeId":"ch_000006","amountMinor":"4200"}'
    ```
 
-3. Click **Run reconciliation**. Wait approximately 10 seconds. Refresh the page.
+3. Click **Run reconciliation**. Wait approximately 10 seconds. The list updates. You do not need to refresh the page.
 4. A new **Missing Internal** exception for `ch_000006` and amount `4200` appears.
 5. Click **Resolve**. Select a resolution code. Type a note. Save the resolution.
 
@@ -374,7 +374,6 @@ These commands use `postgres://tools:local-development-only@localhost:5432/inter
 | `infra/terraform`                                   | Azure Terraform. Validated in CI. Not applied.                                                      |
 | `docs/PRD.md`, `docs/SYSTEM_DESIGN.md`              | Product and design specifications                                                                   |
 | `docs/adr`, `docs/runbooks`, `docs/threat-model.md` | Decisions, operator guides, and the threat model                                                    |
-| `docs/clean-clone-report.md`                        | Step log of a clean-machine review of this README                                                   |
 | `.devin`                                            | Tool development playbook and repository knowledge                                                  |
 | `.github/workflows`                                 | CI: lint, typecheck, tests, end-to-end, dependency rules, security scans, Terraform checks          |
 
@@ -457,6 +456,9 @@ Do not run `terraform plan` or `terraform apply` from this prototype. Read `infr
 | `npm run e2e` fails with a strict mode error on the approval card                 | An earlier run left a pending request with the same note.          | Run `docker compose down -v`, then `docker compose up -d --build --wait`, then run the test again.                                               |
 | Playwright cannot start Chromium on Linux                                         | System libraries are missing.                                      | Run `npx playwright install --with-deps chromium`.                                                                                               |
 | A command fails with a Node.js syntax or engine error                             | The Node.js version is not 22.                                     | Run `nvm use 22`.                                                                                                                                |
+| `node: command not found`                                                         | Node.js is not installed.                                          | Install nvm. Then run `nvm install 22`.                                                                                                          |
+| `curl http://localhost:3000/health` returns `404`                                 | The API has no `/health` route.                                    | Use `/health/live` or `/health/ready`.                                                                                                           |
+| The Jaeger **Service** list is empty                                              | The API and the worker do not export traces.                       | No action is necessary. Read [9. Jaeger trace](#9-jaeger-trace).                                                                                 |
 | You want a clean start                                                            | Old data is in the Docker volumes.                                 | Run `docker compose down -v`, then `docker compose up -d --build --wait`.                                                                        |
 
 ## Security and production limits

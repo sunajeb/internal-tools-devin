@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Activity, Check } from 'lucide-react';
 import {
@@ -19,10 +19,23 @@ import type { User, Message } from '../types.js';
 import { useExceptions } from '../hooks.js';
 import { can } from '../permissions.js';
 
+const reconciliationWatchMs = 60_000;
+
 export function Exceptions({ user }: { user: User }) {
   const client = useQueryClient();
   const titleId = useId();
-  const { data, isLoading, error, refetch } = useExceptions();
+  const [watchUntil, setWatchUntil] = useState<number>();
+  const { data, isLoading, error, refetch } = useExceptions(
+    watchUntil !== undefined,
+  );
+  useEffect(() => {
+    if (watchUntil === undefined) return;
+    const timer = setTimeout(
+      () => setWatchUntil(undefined),
+      Math.max(0, watchUntil - Date.now()),
+    );
+    return () => clearTimeout(timer);
+  }, [watchUntil]);
   const [message, setMessage] = useState<Message>();
   const [resolvingId, setResolvingId] = useState<string>();
   const [resolutionCode, setResolutionCode] = useState(
@@ -55,11 +68,14 @@ export function Exceptions({ user }: { user: User }) {
   const run = useMutation({
     mutationFn: () =>
       api('/api/reconciliation/run', { method: 'POST', body: '{}' }),
-    onSuccess: () =>
+    onSuccess: () => {
       setMessage({
         tone: 'success',
-        text: 'Reconciliation queued. Results will appear in this view.',
-      }),
+        text: 'Reconciliation started. New exceptions show in this list.',
+      });
+      setWatchUntil(Date.now() + reconciliationWatchMs);
+      void client.invalidateQueries({ queryKey: ['exceptions'] });
+    },
     onError: (caught: Error) =>
       setMessage({ tone: 'error', text: caught.message }),
   });

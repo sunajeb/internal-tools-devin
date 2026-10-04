@@ -555,9 +555,9 @@ infra/terraform/
 
 | Activity | How Devin does it | Human role |
 |---|---|---|
-| Build a new tool | Playbook "Add an internal tool" in `.devin/`. A request from Slack or Linear starts a session. Devin runs `scripts/new-tool.ts`, writes the domain code and tests, and opens a PR. | Tool owner writes the request. An engineer reviews and merges. |
+| Build a new tool | Playbook "Add an internal tool" in `.devin/`. A request from Slack or Linear starts the work. Devin runs `scripts/new-tool.ts`, writes the domain code and tests, and opens a PR. | Tool owner writes the request. An engineer reviews and merges. |
 | Change a policy | Devin changes configuration and tests, and opens a PR. Policy activation still needs a second approver in the app. | Finance approves. Engineer reviews. |
-| CI failure | A Devin Automation on CI failure opens a session that diagnoses and pushes a fix PR. | Engineer reviews. |
+| CI failure | A Devin Automation starts on a CI failure. Devin finds the cause and opens a fix PR. | Engineer reviews. |
 | Dependency and security updates | Dependabot opens PRs. Devin fixes breaking changes. | Engineer reviews. |
 | Incident triage | A Devin Automation on an alert reads logs and traces and proposes a fix or a runbook action. | On-call engineer decides. |
 

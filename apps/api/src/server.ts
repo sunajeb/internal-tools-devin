@@ -611,7 +611,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
     request.log.error({ err: error }, 'Unhandled API error');
     return reply
       .code(500)
-      .send({ error: 'The request could not be completed. Try again.' });
+      .send({ error: 'The server could not complete the request. Try again.' });
   });
 
   await server.ready();

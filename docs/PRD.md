@@ -23,7 +23,7 @@ This product is a shared Foundation that supplies these controls one time, for a
 Two reference tools prove the Foundation:
 
 1. **Refunds Console** (deep). It is the highest-risk tool of the 3 current tools. It uses every Foundation capability at production quality.
-2. **Feature-Flag Panel** (small). A separate Devin session builds it on the Foundation. It proves that a new tool is fast to add and gets all controls with no extra work.
+2. **Feature-Flag Panel** (small). It uses the playbook and the Foundation. It proves that a new tool is fast to add and gets all controls with no extra work.
 
 ---
 
@@ -492,7 +492,7 @@ Layer key: **F** = Foundation (all tools get it). **T** = tool-specific.
 8. **Tamper evidence.** Given a database administrator changes an audit row directly, with triggers disabled. When an Auditor runs verify, then verify reports the first broken event ID.
 9. **Kill switch.** Given a Platform Admin pauses refunds execution. Then approved refunds stay `approved` until resume, and an alert shows the pause.
 10. **Route without permission.** Given a developer adds a route with no permission. Then CI fails.
-11. **New tool inherits controls.** Given a separate Devin session builds the Feature-Flag Panel from the playbook. Then the PR adds only tool files (registry entry, routes, migration, pages, tests). The production flag change needs approval, writes audit events and appears in traces, with no new auth, audit, approval or logging code.
+11. **New tool inherits controls.** Given an engineer builds the Feature-Flag Panel from the playbook. Then the PR adds only tool files (registry entry, routes, migration, pages, tests). The production flag change needs approval, writes audit events and appears in traces, with no new auth, audit, approval or logging code.
 
 ---
 
@@ -522,7 +522,7 @@ Layer key: **F** = Foundation (all tools get it). **T** = tool-specific.
 | UI kit and Refunds pages: search, request, inbox, audit viewer, exceptions | 20 | 3 to 4 days |
 | CI with security gates, Terraform, observability | 15 | 3 to 4 days |
 | Tool template, registry, Devin playbook, README, threat model, runbooks | 5 | 2 days |
-| Feature-Flag Panel, built by a separate Devin session from the playbook | 15 | 2 to 3 days |
+| Feature-Flag Panel, built from the playbook | 15 | 2 to 3 days |
 | **Total** | **120** | **about 5 to 6 weeks** |
 
 The human-equivalent values are estimates, not measurements. The README will record the actual Devin time, usage and human review time.
