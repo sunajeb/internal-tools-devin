@@ -1,11 +1,16 @@
-# Internal Tools Foundation and Refunds Console
+<img src="apps/web/public/favicon.svg" width="48" alt="Ledgerline logo">
+
+# Ledgerline
+
+Internal tools platform: shared Foundation, Refunds Console, Feature-Flag Panel.
 
 ## What it is
 
-This repository is a local prototype for fintech internal tools. It has two parts:
+Ledgerline is a local prototype for fintech internal tools. It has three parts:
 
 - **The Foundation** (`packages/foundation`). It gives each tool sign-in, permission checks, CSRF checks, input validation, approvals, an audit hash chain, data masking, idempotency, and an outbox.
 - **The Refunds Console** (`tools/refunds`). It is the reference tool. Agents request refunds. Supervisors and Finance approve them. A worker sends approved refunds to a payment provider.
+- **The Feature-Flag Panel** (`tools/feature-flags`). It is the second tool. It shows that a new tool reuses the Foundation controls. Refer to [Feature-Flag Panel](#feature-flag-panel).
 
 All data is synthetic. The prototype is not ready for production use.
 
@@ -33,6 +38,25 @@ flowchart LR
 - PostgreSQL locks the payment row before it reserves a refund amount.
 - The worker uses the refund ID as the provider idempotency key.
 - Jaeger runs, but no service sends traces to it. Refer to [What is simulated](#what-is-simulated).
+- The stack is a modular monolith: one API, one worker and one web console. Each tool is a module in `tools/<id>` with its own database schema. Refer to [ADR 0009](docs/adr/0009-modular-monolith.md).
+- The API uses the `pg` driver and plain SQL. Versioned SQL migrations are in `apps/api/db/` and `tools/<id>/migrations/`. There is no ORM.
+
+### User interface
+
+The console uses a simple, document-style design:
+
+- The font is Inter (`@fontsource-variable/inter`).
+- The colors are warm neutrals, for example `--ink: #37352f` and `--sidebar: #f7f7f5`. The design tokens are in `apps/web/src/style.css`.
+- All tools use the shared controls in `packages/ui-kit`: `Layout`, `DataTable`, `Form`, `ApprovalInbox`, `AuditViewer`, `MaskedField`, `Dialog`, `ConfirmDialog`, `LoadingState` and `ErrorState`.
+- The end-to-end suite runs axe accessibility checks on the main pages.
+
+| Overview                                                | Refund timeline                                                      |
+| ------------------------------------------------------- | -------------------------------------------------------------------- |
+| ![Overview page](docs/images/login-and-overview.png)    | ![Refund timeline](docs/images/refund-timeline.png)                  |
+| **Audit & controls**                                    | **Feature flag with a pending production change**                    |
+| ![Verified audit chain](docs/images/audit-verified.png) | ![Feature flag detail](docs/images/feature-flags-detail-pending.png) |
+
+The end-to-end suite makes these screenshots. Refer to [Tests](#tests).
 
 ## Prerequisites
 
@@ -176,7 +200,7 @@ Result: the refund has the status **Pending Approval**.
 2. Request a $300 refund for `ch_000003`. Use the steps in demo 1.
 3. Click **Approvals**. Find the request for `ch_000003`.
 
-Result: the page shows **Requesters cannot approve their own refund.** The **Approve as supervisor** and **Decline** buttons are disabled. The server also blocks the action. A direct call to `POST /api/approvals/<id>/approve` returns HTTP 403 with `You cannot approve a request that you submitted.`
+Result: the page shows **Requesters cannot approve their own refund.** The **Approve as supervisor** and **Decline** buttons are disabled. The server also blocks the action. A direct call to `POST /api/approvals/<approval_id>/approve` returns HTTP 403 with `You cannot approve a request that you submitted.` The `approval_id` value comes from `GET /api/approvals`. The audit log records `approval.self_approval_denied`.
 
 ### 4. Dual approval
 
@@ -192,8 +216,8 @@ Result: the page shows **Requesters cannot approve their own refund.** The **App
 2. Sign in as `agent`. Request a $400 refund for `ch_000004`.
 3. Sign in as `supervisor`. Approve the request.
 4. Click **Refunds**. The `ch_000004` refund stays **Approved**. The worker does not send it to the provider.
-5. Sign in as `platform-admin`. Click **Resume execution**.
-6. In approximately 5 seconds, the `ch_000004` refund changes to **Succeeded**.
+5. Sign in as `platform-admin`. On **Overview**, click **Resume execution**. The `platform-admin` user has no **Refunds** page.
+6. Sign in as `supervisor`. Click **Refunds**. In approximately 5 seconds, the `ch_000004` refund changes to **Succeeded**.
 
 The audit log records `execution paused` and `execution resumed`. The metric `execution_paused` is `1` while execution is paused.
 
@@ -212,7 +236,7 @@ The audit log records `execution paused` and `execution resumed`. The metric `ex
 
 3. Click **Run reconciliation**. Wait approximately 10 seconds. Refresh the page.
 4. A new **Missing Internal** exception for `ch_000006` and amount `4200` appears.
-5. Click **Resolve**. Select a resolution code. Type a note. Save the resolution.
+5. Click **Resolve** on the `ch_000006` exception. The **Resolution code** field contains `provider_record_confirmed`. Keep it or type a different code. Type a note with at least 10 characters in **Review note**. Click **Confirm resolution**. The exception leaves the open list.
 
 The simulator also accepts fault injection on `POST /admin/faults` with the same token. Supported faults: `timeout-then-succeed`, `500`, `declined`, `duplicate-webhook`, `out-of-order-webhook`. Send `{"clear":true}` to remove all faults.
 
@@ -220,8 +244,9 @@ The simulator also accepts fault injection on `POST /admin/faults` with the same
 
 1. Sign in as `agent`. Open payment `ch_000005`. The email shows `[REDACTED]`. There is no **Reveal** button.
 2. Sign in as `supervisor`. Open payment `ch_000005`. Click **Reveal**.
+3. A dialog asks for a reason. Type a reason with at least 10 characters, for example `Customer asked for a receipt by email.` Click **Reveal email**.
 
-Result: the email shows `customer5@example.test`. The button changes to **Revealed**. The audit log records `customer email revealed`.
+Result: the email shows `customer5@example.test`. The button changes to **Revealed**. The audit log records `customer.email_revealed` with the reason.
 
 ### 8. Audit verify and tamper demo
 
@@ -285,6 +310,8 @@ The Feature-Flag Panel is the second tool. It uses the Foundation for sign-in, a
 - If the approval expires, the change request expires. The editor can then request a new production change.
 - `auditor` and `platform_admin` can read flags, approvals and history. They cannot change flags.
 
+Use the seeded users `flag-editor` and `flag-approver` from [Seeded logins](#seeded-logins). The Keycloak realm file `infra/keycloak/internal-tools-realm.json` creates them.
+
 Demo steps:
 
 1. Sign in as `flag-editor`. Open Feature flags.
@@ -341,8 +368,9 @@ npx playwright install chromium
 npm run e2e
 ```
 
-- `npm test` runs the Vitest unit tests. It does not need the stack.
-- `npm run e2e` signs in as `agent`, `supervisor`, and `auditor`. It requests a refund, approves it, and verifies the audit chain. It saves screenshots to `test-results/screens/`. Set `SCREENSHOT_DIR` to use a different folder.
+- `npm test` runs the Vitest unit and integration tests. The integration tests use the Compose stack. If the stack does not run, they are skipped with a warning.
+- `npm run e2e` runs 12 Playwright tests: sign-in and sign-out, the refund flow, the Feature-Flag Panel flow and axe accessibility checks for each role. It saves full-page screenshots to `test-results/screens/`. Set `SCREENSHOT_DIR` to use a different folder. Set `A11Y_SCREENSHOT_DIR` to also save a full-page screenshot and an axe report for each page in the accessibility test.
+- To update the screenshots in `docs/images`, run `SCREENSHOT_DIR=docs/images npm run e2e` on a new stack. Keep only the files that the README uses.
 - On Linux, `npx playwright install --with-deps chromium` also installs the system libraries.
 
 To apply migrations and seed data from the host to the Compose database:
@@ -356,27 +384,29 @@ These commands use `postgres://tools:local-development-only@localhost:5432/inter
 
 ## Repository layout
 
-| Path                                                | Purpose                                                                                             |
-| --------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `packages/foundation`                               | Shared runtime: `defineRoute`, `registerTool`, approvals, audit chain, masking, idempotency, outbox |
-| `packages/ui-kit`                                   | Shared React controls and the `api()` client                                                        |
-| `packages/testing`                                  | Shared test helpers                                                                                 |
-| `apps/api`                                          | Fastify server, OIDC sign-in, SQL migration (`db/`), seed data, and the API tool registry           |
-| `apps/worker`                                       | Outbox worker, reconciler loop, and the worker tool registry                                        |
-| `apps/web`                                          | React console shell and the web tool registry                                                       |
-| `services/payment-simulator`                        | Local payment provider with signed webhooks and fault injection                                     |
-| `tools/refunds`                                     | Refunds Console: registry, API routes, worker handlers, web pages, and tests                        |
-| `tools/feature-flags`                               | Feature-Flag Panel: registry, migrations, seed, API routes, web pages, runbook, and tests           |
-| `scripts/new-tool.ts`, `scripts/check-new-tool.sh`  | Tool generator and its check                                                                        |
-| `e2e`                                               | Playwright configuration and specs                                                                  |
-| `infra/keycloak`                                    | Local Keycloak realm with users and groups                                                          |
-| `infra/prometheus.yml`                              | Prometheus scrape configuration                                                                     |
-| `infra/terraform`                                   | Azure Terraform. Validated in CI. Not applied.                                                      |
-| `docs/PRD.md`, `docs/SYSTEM_DESIGN.md`              | Product and design specifications                                                                   |
-| `docs/adr`, `docs/runbooks`, `docs/threat-model.md` | Decisions, operator guides, and the threat model                                                    |
-| `docs/clean-clone-report.md`                        | Step log of a clean-machine review of this README                                                   |
-| `.devin`                                            | Tool development playbook and repository knowledge                                                  |
-| `.github/workflows`                                 | CI: lint, typecheck, tests, end-to-end, dependency rules, security scans, Terraform checks          |
+| Path                                                | Purpose                                                                                              |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `packages/foundation`                               | Shared runtime: `defineRoute`, `registerTool`, approvals, audit chain, masking, idempotency, outbox  |
+| `packages/ui-kit`                                   | Shared React controls and the `api()` client                                                         |
+| `packages/testing`                                  | Shared test helpers                                                                                  |
+| `apps/api`                                          | Fastify server, OIDC sign-in, versioned SQL migrations (`db/`), seed data, and the API tool registry |
+| `apps/worker`                                       | Outbox worker, reconciler loop, and the worker tool registry                                         |
+| `apps/web`                                          | React console shell and the web tool registry                                                        |
+| `services/payment-simulator`                        | Local payment provider with signed webhooks and fault injection                                      |
+| `tools/refunds`                                     | Refunds Console: registry, API routes, worker handlers, web pages, and tests                         |
+| `tools/feature-flags`                               | Feature-Flag Panel: registry, migrations, seed, API routes, web pages, runbook, and tests            |
+| `scripts/new-tool.ts`, `scripts/check-new-tool.sh`  | Tool generator and its check                                                                         |
+| `e2e`                                               | Playwright configuration and specs                                                                   |
+| `infra/keycloak`                                    | Local Keycloak realm with users and groups                                                           |
+| `infra/prometheus.yml`                              | Prometheus scrape configuration                                                                      |
+| `infra/terraform`                                   | Azure Terraform. Validated in CI. Not applied.                                                       |
+| `docs/PRD.md`, `docs/SYSTEM_DESIGN.md`              | Product and design specifications                                                                    |
+| `docs/adr`, `docs/runbooks`, `docs/threat-model.md` | Decisions, operator guides, and the threat model                                                     |
+| `docs/images`                                       | Screenshots from the end-to-end suite                                                                |
+| `.devin`                                            | Tool development playbook and repository knowledge                                                   |
+| `.github/workflows`                                 | CI: lint, typecheck, tests, end-to-end, dependency rules, security scans, Terraform checks           |
+
+Database access uses the `pg` driver with parameterized SQL. Drizzle was removed: `apps/api/src/schema.ts` and `drizzle.config.ts` do not exist. `apps/api/src/migrate.ts` applies the files in `apps/api/db/` in order, then the files in each `tools/<id>/migrations/`.
 
 ## Status of each capability
 
@@ -390,8 +420,12 @@ These commands use `postgres://tools:local-development-only@localhost:5432/inter
 | Reconciliation and exception queue                                       | Yes   |                                                          |                                                                                    |                                                                                |
 | Masked customer email with audited reveal                                | Yes   |                                                          |                                                                                    |                                                                                |
 | CSV exports                                                              | Yes   |                                                          |                                                                                    |                                                                                |
-| Tool generator and playbook                                              | Yes   |                                                          |                                                                                    |                                                                                |
+| Tool generator, playbook and CI guardrails                               | Yes   |                                                          |                                                                                    |                                                                                |
 | Prometheus metrics endpoint                                              | Yes   |                                                          |                                                                                    |                                                                                |
+| Shared design system and axe checks                                      | Yes   |                                                          | `docs/adr/0011-shared-design-system.md`                                            | Manual accessibility audit                                                     |
+| Audit head anchor in immutable storage                                   |       |                                                          | `docs/adr/0004-hash-chain-audit.md`, WORM storage in Terraform                     | Storage account, export job, and retention policy                              |
+| KYC vendor                                                               |       | No KYC tool exists. KYC is an example of a future tool.  |                                                                                    | KYC vendor contract and integration                                            |
+| Cost and disaster recovery                                               |       |                                                          | Not measured. Not tested.                                                          | Cost tracking, recovery targets, and recovery tests                            |
 | Payment provider                                                         |       | Yes: local simulator. Optional Stripe test-mode adapter. | `docs/runbooks/stripe-test-mode.md`                                                | Production provider account and keys                                           |
 | Identity provider                                                        |       | Yes: local Keycloak                                      | `docs/adr/0006-keycloak-local-identity.md`                                         | Production IdP (for example Entra ID), groups, and joiner-mover-leaver process |
 | Customer and payment data                                                |       | Yes: synthetic seed data                                 |                                                                                    | Real data, data migration, and retention rules                                 |
@@ -406,7 +440,7 @@ These commands use `postgres://tools:local-development-only@localhost:5432/inter
 
 The folder `infra/terraform` has Azure Terraform for `dev`, `staging`, and `prod`. CI runs `terraform fmt`, `terraform validate`, TFLint, and Trivy on it. Nobody has applied it. It creates no cloud resources in this prototype.
 
-The web app and the worker connect to PostgreSQL with their managed identities. The code reads `PGHOST`, `PGPORT`, `PGUSER`, and `PGDATABASE` and uses an Entra access token as the password. If `DATABASE_URL` is set, the code uses it first. Docker Compose uses this path. With `NODE_ENV=production`, the API, the worker, and the migration script stop at startup if they find no database setting.
+In the Terraform design, the web app and the worker connect to PostgreSQL with their managed identities. Nobody has tested this path on Azure. `databaseConfig()` in `packages/foundation/src/database.ts` reads `PGHOST`, `PGPORT`, `PGUSER`, and `PGDATABASE` and uses an Entra access token as the password. If `DATABASE_URL` is set, the code uses it first. Docker Compose sets `DATABASE_URL`. With `NODE_ENV=production`, the API, the worker, and the migration script stop at startup if they find no database setting.
 
 Modules: `network`, `postgres`, `app_service`, `worker`, `registry`, `key_vault`, `monitoring`, `alerts`, `storage_worm`, `front_door`, and `identity`.
 
@@ -434,6 +468,14 @@ Do not run `terraform plan` or `terraform apply` from this prototype. Read `infr
 - **Tracing.** Jaeger runs, but no service sends traces to it.
 - **Environment.** The console header shows a local environment badge. Cookies are not marked `Secure` because the stack uses HTTP.
 
+Known limits:
+
+- The audit hash chain is not keyed. A database owner who rewrites the full chain is not detected. Production needs an external immutable copy of the chain head.
+- Exactly-once applies to one refund ID. It does not apply to one customer intent.
+- All tools share the database role `app_runtime`. A defect in one tool can reach the data of other tools.
+- There is no live Azure deployment. The Terraform is validated only.
+- There is no measured cost and no tested disaster recovery.
+
 ## What the client owns
 
 - The production identity provider, its groups, and access reviews.
@@ -454,11 +496,21 @@ Do not run `terraform plan` or `terraform apply` from this prototype. Read `infr
 | `npm run db:migrate` fails with `password authentication failed for user "tools"` | The database password is not the local default.                    | Set `MIGRATION_DATABASE_URL=postgres://tools:<password>@localhost:5432/internal_tools`.                                                          |
 | A refund stays **Approved**                                                       | Execution is paused, or the worker is stopped.                     | Sign in as `platform-admin` and click **Resume execution**. Run `docker compose logs worker`. Read `docs/runbooks/refund-stuck-in-executing.md`. |
 | **Verify chain** shows **Audit chain integrity check failed**                     | Somebody changed an audit row, for example in demo 8.              | Read `docs/runbooks/audit-verify-failed.md`. On a local stack, run `docker compose down -v` and start again.                                     |
-| `npm run e2e` fails with a strict mode error on the approval card                 | An earlier run left a pending request with the same note.          | Run `docker compose down -v`, then `docker compose up -d --build --wait`, then run the test again.                                               |
+| `npm run e2e` or `npm test` fails on a used stack                                 | Earlier runs or demos left data that the tests do not expect.      | Run `docker compose down -v`, then `docker compose up -d --build --wait`, then run the test again.                                               |
 | Playwright cannot start Chromium on Linux                                         | System libraries are missing.                                      | Run `npx playwright install --with-deps chromium`.                                                                                               |
 | A command fails with a Node.js syntax or engine error                             | The Node.js version is not 22.                                     | Run `nvm use 22`.                                                                                                                                |
+| A refund demo shows a different status than the README                            | The demos changed data. Each demo expects a new stack.             | Run `docker compose down -v`, then `docker compose up -d --build --wait`. Run the demos in order.                                                |
+| `platform-admin` sees no **Refunds** page                                         | This role can open only **Overview** and **Audit & controls**.     | Use `supervisor` to see refund status.                                                                                                           |
+| **Reveal** does not show the email                                                | The API needs a reason of at least 10 characters.                  | Type a reason, then click **Reveal email**.                                                                                                      |
 | You want a clean start                                                            | Old data is in the Docker volumes.                                 | Run `docker compose down -v`, then `docker compose up -d --build --wait`.                                                                        |
 
 ## Security and production limits
 
-Use only synthetic records in this prototype. Do not add production data or credentials. The local passwords and `.env.example` values are not production secrets. Before production use, the team must review the threat model, configure a production identity provider, set up secret storage, deploy a managed database, test recovery, and complete the deployment work.
+Use only synthetic records in this prototype. Do not add production data or credentials. The local passwords and `.env.example` values are not production secrets. Before production use, the team must do these tasks:
+
+- Review the threat model.
+- Configure a production identity provider.
+- Set up secret storage.
+- Deploy a managed database.
+- Test recovery.
+- Complete the deployment work.

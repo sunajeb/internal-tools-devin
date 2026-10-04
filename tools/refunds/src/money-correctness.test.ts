@@ -755,7 +755,7 @@ describe.skipIf(!stackAvailable)(
       await waitFor(
         'the approved refund to execute after resume',
         () => refundRow(approvedId),
-        (row) => row.status === 'succeeded',
+        (row) => row.status === 'succeeded' || row.status === 'reconciled',
       );
       expect(await providerRefunds(approvedId)).toHaveLength(1);
     });

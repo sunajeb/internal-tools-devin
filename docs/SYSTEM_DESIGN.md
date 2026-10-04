@@ -1,4 +1,4 @@
-# Internal Tools Foundation and Refunds Console: System Design
+# Ledgerline: System Design
 
 | Field | Value |
 |---|---|
@@ -6,6 +6,8 @@
 | Date | 4 October 2026 |
 | Writing standard | ASD-STE100 Simplified Technical English |
 | Related document | `PRD.md` (requirement IDs in this document refer to the PRD) |
+
+This document describes the target design. Some parts are production work and are not in the prototype. Each such part has the label **Not built**. Section 21 and the README status table list what the prototype builds.
 
 ---
 
@@ -50,17 +52,19 @@ flowchart LR
     PG -->|audit export| SIEM[Company SIEM]
 ```
 
+**Not built:** the OpenTelemetry collector, App Insights, the audit export to immutable storage and the SIEM link. The prototype exposes Prometheus metrics. Jaeger runs locally but receives no traces.
+
 ### 2.1 Components
 
 | Component | Responsibility | Technology |
 |---|---|---|
 | Web | Single-page app. Shared UI kit. One route group for each tool. | React, Vite, TypeScript, TanStack Query |
 | API | HTTP API and backend-for-frontend (BFF) session. Applies all Foundation middleware. Hosts tool routes. | Node.js, Fastify, TypeScript, Zod |
-| Worker | Sends outbox items, runs reconciliation, expires approvals, exports audit. Separate process, same code base. | Node.js, Postgres `SKIP LOCKED` queue |
+| Worker | Sends outbox items, processes webhooks, runs reconciliation, expires approvals. Separate process, same code base. Audit export is **Not built**. | Node.js, Postgres `SKIP LOCKED` queue |
 | Database | System of record for all tools. One schema for the Foundation, one schema for each tool. | PostgreSQL 16, `pg` and versioned SQL migrations |
 | Identity provider | Sign-in and groups. | Keycloak locally; Entra ID in production |
 | Payment simulator | Local stand-in for the provider: refunds API with idempotency keys, delays, failures, signed webhooks, list API for reconciliation. | Small Fastify service |
-| Observability | Traces, metrics, logs. | OpenTelemetry SDK; Jaeger and Prometheus locally; Azure Monitor in production |
+| Observability | Metrics and JSON logs. Traces are **Not built**. | pino logs and a Prometheus `/metrics` endpoint locally; OpenTelemetry and Azure Monitor are production work |
 
 ### 2.2 Why one deployable unit
 
@@ -73,35 +77,38 @@ The API and the web app deploy as one service. The worker deploys as a second se
 ```
 /
 ├── apps/
-│   ├── api/                 # Fastify server, mounts Foundation + tools
-│   ├── web/                 # React SPA, mounts tool route groups
-│   └── worker/              # outbox, reconciliation, expiry, audit export
+│   ├── api/                 # Fastify server, sign-in, SQL migrations (db/), seed, tool registry
+│   ├── web/                 # React console shell, design tokens (src/style.css), tool registry
+│   └── worker/              # outbox worker, tool reconcilers, approval expiry
 ├── packages/
-│   ├── foundation/          # identity, policy, approvals, audit, idempotency,
-│   │                        # outbox, masking, registry, telemetry
-│   ├── ui-kit/              # layout, DataTable, Form, ApprovalInbox, AuditViewer, MaskedField
-│   └── testing/             # fixtures, role helpers, permission-matrix generator
+│   ├── foundation/          # defineTool, defineRoute, registerTool, approvals, audit,
+│   │                        # idempotency, masking, retry
+│   ├── ui-kit/              # Layout, DataTable, Form, ApprovalInbox, AuditViewer, MaskedField
+│   └── testing/             # permission-matrix helper
 ├── tools/
-│   ├── refunds/             # registry.ts, routes, domain, migrations, pages, tests, runbook
-│   └── feature-flags/       # same shape
+│   ├── refunds/             # registry, API routes, worker handlers, pages, tests
+│   └── feature-flags/       # registry, migrations, seed, API routes, pages, runbook, tests
 ├── services/
 │   └── payment-simulator/
 ├── infra/
-│   ├── terraform/           # Azure modules and environments
+│   ├── terraform/           # Azure modules and environments (validated, not applied)
 │   ├── keycloak/            # realm export with seeded users and groups
-│   └── otel/
-├── scripts/new-tool.ts      # tool template generator
-├── docs/                    # PRD, design, threat model, runbooks, ADRs
-├── .devin/                  # playbook "Add an internal tool", Knowledge note
+│   └── prometheus.yml
+├── e2e/                     # Playwright specs, including axe checks
+├── scripts/                 # new-tool.ts generator, check-new-tool.sh
+├── docs/                    # PRD, design, threat model, runbooks, ADRs, images
+├── .devin/                  # playbook "Add an internal tool", knowledge note
 ├── .github/workflows/       # CI
 └── docker-compose.yml
 ```
+
+Database access uses `pg` with plain SQL. There is no ORM.
 
 ---
 
 ## 4. Tool model
 
-Each tool exports one registry entry. The Foundation reads it at start time.
+Each tool exports one registry entry. The Foundation reads it at start time. The example below is simplified. The real entries are in `tools/refunds/src/registry.ts` and `tools/feature-flags/src/registry.ts`.
 
 ```ts
 export const refundsTool = defineTool({
@@ -134,9 +141,9 @@ export const refundsTool = defineTool({
 ```
 
 Rules:
-1. `auditor` and `platform_admin` are global roles. The Foundation adds them to each tool.
-2. CI generates one test for each (role, permission) pair from this entry (FR-AZ-4).
-3. The registry page lists each tool, its owner, data class, roles and approval rules (FR-GP-5).
+1. `auditor` and `platform_admin` are global roles. A tool lists them in its permission matrix when they need access.
+2. `apps/api/test/permission-matrix.test.ts` tests each role against each permission of each registered tool (FR-AZ-4).
+3. `GET /api/registry` lists each tool, its owner, data class and roles (FR-GP-5).
 
 ---
 
@@ -146,26 +153,27 @@ Each API request passes these steps in this order. Tool code runs only at step 9
 
 | Step | Middleware | Result on failure |
 |---|---|---|
-| 1 | Request ID and trace context | — |
+| 1 | Request ID (trace context is **Not built**) | — |
 | 2 | Security headers, CORS (same origin only) | — |
-| 3 | Rate limit (user and IP, token bucket in Postgres or memory) | 429 |
+| 3 | Rate limit (200 requests each minute, in memory) | 429 |
 | 4 | Session: read cookie, load session, check idle and absolute timeout | 401 |
-| 5 | User status: re-check with IdP every 15 minutes (refresh token) | 401 and session end |
+| 5 | User status: re-check with IdP every 15 minutes. **Not built** | 401 and session end |
 | 6 | CSRF check for non-GET (double-submit token) | 403 |
 | 7 | Input validation (Zod schema on the route) | 400 |
 | 8 | Authorization: `authorize(user, permission, resource?)` | 403 and audit event |
 | 9 | Idempotency (state-changing routes): look up key | Stored response or 409/422 |
-| 10 | Tool handler in one database transaction, with audit writer | — |
+| 10 | Tool handler in one database transaction, with audit writer. A successful non-GET route with no audit event fails. | 500 |
 | 11 | Response masking by data class and role | — |
 | 12 | Structured access log | — |
 
-A route definition must include `permission`. The server refuses to start, and CI fails, if a route has no permission (FR-AZ-1).
+A route definition must include `permission`. `defineRoute` throws if a route has no permission. `registerTool` throws if the permission is not in the tool matrix. The server does not start, and the tests fail (FR-AZ-1). Refer to ADR 0010.
 
 ```ts
-route.post("/refunds", {
+defineRoute({
+  method: "POST",
+  path: "/api/refunds",
   permission: "refund.request",
   body: CreateRefundSchema,
-  idempotent: true,
   handler: createRefund,
 });
 ```
@@ -175,9 +183,9 @@ route.post("/refunds", {
 ## 6. Identity and sessions
 
 1. **Flow.** OIDC authorization code with PKCE. The API is a confidential client (BFF). The browser never receives tokens (FR-ID-3).
-2. **Session.** Server-side row in `foundation.sessions`: user ID, groups, roles, created time, last activity, encrypted refresh token. Cookie: `__Host-sid`, `Secure`, `HttpOnly`, `SameSite=Lax`.
+2. **Session.** Server-side row in `foundation.sessions`: user ID, roles, created time and last activity. The session ends after 30 minutes without activity or after 8 hours. Cookie: `__Host-sid` in production and `sid` locally, `HttpOnly`, `SameSite=Lax`, `Secure` in production.
 3. **Roles.** Computed at sign-in from the `groups` claim through the registry mapping. Not stored elsewhere (FR-ID-5).
-4. **Deprovisioning.** Every 15 minutes the API uses the refresh token. If the IdP refuses it, the session ends (FR-ID-6). Entra ID SCIM and Conditional Access stay in the IdP.
+4. **Deprovisioning.** **Not built:** the API does not re-check the IdP during a session (FR-ID-6). A removed user keeps access until the session ends. Entra ID SCIM and Conditional Access stay in the IdP.
 5. **Local.** Keycloak realm with seeded users for each role, including one user with both Agent and Supervisor roles to test separation of duties.
 6. **Production.** Entra ID app registration. Group claims or app roles. MFA and Conditional Access through Entra policy.
 
@@ -200,17 +208,17 @@ export const refundPolicy = definePolicy({
 ```
 
 1. Each step needs one approval from a user with one of the listed roles.
-2. Steps in a tier can complete in any order.
-3. Policy values (thresholds, limits) are in `foundation.policy_versions`. A change creates a new version in state `proposed`. It becomes `active` only after a second person approves it (FR-APR-9).
+2. Steps in a tier complete in order. The engine refuses a later step until the earlier steps are complete.
+3. Policy versions are in `foundation.policy_versions`. **Not built:** an in-app flow to propose and approve a new version (FR-APR-9). Policy values change through a reviewed pull request.
 
 ### 7.2 Rules that the engine enforces
 
 | Rule | Where enforced |
 |---|---|
-| Approver is not the requester | Engine check and DB constraint `CHECK (approver_id <> requester_id)` through a denormalized requester column |
+| Approver is not the requester | Engine check. The denied attempt writes an audit event. There is no database constraint. |
 | One approval for each user on each request | Unique index `(approval_request_id, approver_id)` |
 | One approval for each step | Unique index `(approval_request_id, step_index)` |
-| Content locked after first approval | Request content hash stored at creation. Tool tables refuse updates while an approval request is open (trigger). |
+| Content locked after first approval | Request content hash stored at creation. Tool routes do not change a request while it is open. There is no trigger. |
 | Concurrent approvals | `SELECT ... FOR UPDATE` on the approval request row |
 | Policy version recorded | `policy_version` column, not null |
 
@@ -259,9 +267,9 @@ hash(0) = SHA-256("genesis")
 
 1. The audit writer takes a transaction-level advisory lock, reads the last hash, computes the new hash and inserts. This serializes audit writes. Expected write volume (less than 50 for each second) permits this.
 2. A trigger refuses `UPDATE` and `DELETE`. The application database role has `INSERT` and `SELECT` only on this table. A separate owner role owns the table.
-3. `GET /audit/verify` recomputes the chain and returns the first broken `seq`, if any.
-4. **Production anchor.** The worker exports each hour the new events and the last hash to Azure Blob Storage with a locked time-based retention policy (WORM). A database administrator who rewrites the full chain cannot change the exported anchors. Microsoft states that locked WORM policies meet SEC 17a-4(f) storage requirements (Cohasset assessment).
-5. **SIEM.** The same export goes to the company SIEM through Azure Monitor diagnostic settings or a log forwarder.
+3. `GET /api/audit/verify` recomputes the chain and returns the first broken `seq`, if any.
+4. **Production anchor (Not built).** The hash is not keyed, so a full rewrite of the chain is not detected without an external anchor. In production, the worker must export the new events and the last hash each hour. The target is Azure Blob Storage with a locked time-based retention policy (WORM). A database administrator who rewrites the full chain cannot change the exported anchors. Microsoft states that locked WORM policies meet SEC 17a-4(f) storage requirements (Cohasset assessment).
+5. **SIEM (Not built).** The same export must go to the company SIEM through Azure Monitor diagnostic settings or a log forwarder.
 
 ### 8.3 What creates an audit event
 
@@ -283,7 +291,7 @@ foundation.idempotency_keys
 
 1. The client sends `Idempotency-Key` (UUID). The UI makes one key for each form open.
 2. Insert with `ON CONFLICT DO NOTHING`. If the row exists with the same `request_hash`, return the stored response. If the hash is different, return 422. If the first request is still in progress, return 409.
-3. Keys expire after 24 hours. (Stripe uses a similar rule: keys can be removed after they are at least 24 hours old.)
+3. **Not built:** key expiry. The prototype keeps all keys. (Stripe removes keys after they are at least 24 hours old.)
 
 ### 9.2 Transactional outbox
 
@@ -297,8 +305,8 @@ foundation.outbox
 1. The tool handler inserts the outbox row in the same transaction as the business change (FR-SE-2).
 2. The worker claims rows with `SELECT ... FOR UPDATE SKIP LOCKED WHERE status='pending' AND next_attempt_at <= now()`.
 3. The worker calls the tool handler for `kind`. For refunds, it calls the provider with `Idempotency-Key = refund.id` (FR-SE-3).
-4. Retry: delay = min(2^attempts × 5 s, 15 min) plus random jitter, up to 8 attempts. Then status `failed`, tool object `failed`, alert (FR-SE-4).
-5. A row stuck in `in_flight` for more than 5 minutes returns to `pending`. This is safe because the provider call is idempotent.
+4. Retry: delay = min(2^attempts × 5 s, 15 min) plus random jitter, up to 8 attempts. Then status `failed` and tool object `failed`. The alert is **Not built** (FR-SE-4).
+5. A row stuck in `in_flight` after its 1-minute lease expires is claimed again. This is safe because the provider call is idempotent.
 6. **Kill switch.** `foundation.tool_settings.execution_paused`. The worker skips paused tools and emits a metric (FR-SE-8).
 
 ### 9.3 Webhooks
@@ -327,7 +335,7 @@ interface Reconciler<I, E> {
 }
 ```
 
-1. The worker runs each reconciler each day at 02:00 UTC for the previous 3 days (overlap catches late events), and on demand.
+1. The worker runs the provider reconciler every 60 seconds. Finance can also start it with **Run reconciliation** (`POST /api/reconciliation/run`).
 2. Exception types: `missing_internal`, `missing_external`, `amount_mismatch`, `currency_mismatch`, `state_mismatch`.
 3. Exceptions are unique by `(reconciler, key, type)`. A new run does not duplicate an open exception.
 4. A match moves the refund from `succeeded` to `reconciled`.
@@ -356,7 +364,7 @@ refunds.agent_daily_totals
   agent_id text, day date, auto_minor bigint, primary key (agent_id, day)
 ```
 
-Indexes: `charges(customer_id)`, `charges(card_last4, created_at)`, `charges(created_at, id)` for keyset pages, trigram index on `customer_email`, `refunds(status, created_at)`, `refunds(charge_id)`.
+Indexes: `charges(customer_id)`, `charges(card_last4, created_at, id)`, `charges(created_at, id)` for keyset pages, trigram indexes on `id`, `customer_id`, `customer_email` and `card_last4`, `refunds(status, created_at, id)`, `refunds(charge_id, created_at)`.
 
 ### 10.2 Create refund (the money rule)
 
@@ -376,9 +384,11 @@ COMMIT;
 
 ### 10.3 State transitions
 
-A single function `transition(refund, to, cause)` checks the allowed-transition table from PRD section 8.3, updates the row, adjusts `refunded_minor` if needed and writes the audit event. A database trigger checks the same table as a second control.
+The trigger `refunds.check_refund_transition` permits only these transitions: `pending_approval` to `approved`, `rejected`, `cancelled` or `expired`; `approved` to `executing`; `executing` to `succeeded` or `failed`; `succeeded` to `reconciled`. A move to `rejected`, `cancelled`, `expired` or `failed` releases the reserved amount.
 
 ### 10.4 Payment provider adapter
+
+The interface below is simplified. The real adapter is in `tools/refunds/src/provider.ts`.
 
 ```ts
 interface PaymentProvider {
@@ -390,24 +400,30 @@ interface PaymentProvider {
 }
 ```
 
-Implementations: `SimulatorProvider` (default), `StripeProvider` (test mode, enabled when `STRIPE_SECRET_KEY` is present). The simulator supports fault injection through headers or config: timeout, 500 error, duplicate webhook, out-of-order webhook, and a "ghost refund" that exists only at the provider. The tests use these faults for acceptance criteria 5 to 7.
+Implementations: `SimulatorProvider` (default), `StripeProvider` (test mode, enabled when `STRIPE_SECRET_KEY` is present). The simulator injects faults through headers or config. The faults are timeout, 500 error, duplicate webhook and out-of-order webhook. A "ghost refund" exists only at the provider. The tests use these faults for acceptance criteria 5 to 7.
 
 ---
 
 ## 11. Feature-Flag Panel design
 
-1. Tables: `feature_flags.flags (key, description, owner)`, `feature_flags.values (flag_key, environment, value jsonb, version)`.
+1. Tables: `feature_flags.flags`, `feature_flags.flag_environments` and `feature_flags.change_requests`.
 2. Development and staging changes write directly, with audit.
-3. Production changes create an approval request with one step `["flag_approver"]`. `onApproved` writes the new value.
-4. Read API `GET /flags/:env` uses a service token with permission `flags.read`.
-5. The tool uses only Foundation APIs: `defineTool`, `route`, `definePolicy`, `audit`, `DataTable`, `ApprovalInbox`. A CI rule (dependency-cruiser) refuses imports from tool code into Foundation internals.
+3. Production changes create a Foundation approval request. A `flag_approver` who is not the requester approves it. The approval writes the new value in the same transaction.
+4. **Not built:** a read API for services with a service token.
+5. The tool uses only the public Foundation and UI kit packages. The dependency-cruiser rules `no-cross-tool-imports` and `tools-use-public-packages-only` enforce this.
 
 ---
 
 ## 12. Web application
 
 1. One shell: top bar with user, roles and environment badge; left navigation from the registry (only tools that the user can open).
-2. Shared components: `DataTable` (server-side filters, keyset pages), `Form` (Zod schema shared with API), `ApprovalInbox` (all tools), `AuditViewer`, `MaskedField` (reveal button calls the API and creates an audit event), `ConfirmDialog` with idempotency key.
+2. Shared components:
+   - `DataTable` uses server-side filters and keyset pages.
+   - `Form` uses a Zod schema that the API also uses.
+   - `ApprovalInbox` serves all tools.
+   - `AuditViewer` shows audit events.
+   - `MaskedField` calls the API to reveal a value. The API writes an audit event.
+   - `ConfirmDialog` sends an idempotency key.
 3. Refunds pages: search, charge detail, request form with live tier preview, inbox, refund detail with timeline, exceptions queue, dashboard.
 4. Accessibility: semantic HTML, keyboard navigation, axe checks in Playwright.
 
@@ -420,25 +436,25 @@ Implementations: `SimulatorProvider` (default), `StripeProvider` (test mode, ena
 | Threat area | Control |
 |---|---|
 | Authentication | OIDC with PKCE, BFF, no tokens in browser, `__Host-` cookie |
-| Session theft | Short idle timeout, rotation at sign-in, IdP re-check |
+| Session theft | 30-minute idle timeout, 8-hour limit, new session at sign-in. IdP re-check is **Not built**. |
 | CSRF | SameSite cookie plus double-submit token |
-| XSS | React escaping, strict CSP (`default-src 'self'`, no inline script), no `dangerouslySetInnerHTML` (lint rule) |
+| XSS | React escaping, CSP (`default-src 'self'`, `script-src 'self'`; inline styles are permitted) |
 | Injection | Parameterized queries only (`pg`), Zod validation |
 | Broken access control | Deny by default, route permission required, generated matrix tests |
-| Insider fraud | Separation of duties, approvals, daily limits, audit with anchors |
+| Insider fraud | Separation of duties, approvals, daily limits, hash-chain audit (external anchor is **Not built**) |
 | Duplicate money movement | Idempotency at API and provider, outbox, DB check constraint |
 | Webhook forgery | Signature and timestamp check, de-duplication |
 | Data exposure | Data classes, masking, logged reveal, no PAN, synthetic non-prod data |
 | Secrets | Key Vault references in App Service settings, managed identity, no secrets in repo (gitleaks) |
 | Supply chain | Lockfile, Dependabot, npm audit, Semgrep, Trivy image scan, SBOM, pinned base images |
-| Denial of service | WAF, rate limits, request size limits, statement timeout in Postgres |
+| Denial of service | Rate limits, request size limits, 5-second statement timeout. WAF in production. |
 
 ### 13.2 Threat model summary (STRIDE)
 
 | STRIDE | Example | Mitigation |
 |---|---|---|
 | Spoofing | Forged webhook claims a refund succeeded | Signature, timestamp, reconciliation |
-| Tampering | Admin edits an audit row | Trigger, role separation, hash chain, WORM anchor |
+| Tampering | Admin edits an audit row | Trigger, role separation, hash chain. WORM anchor is production work. |
 | Repudiation | Approver denies an approval | Audit with actor, IP, request ID, IdP sign-in logs |
 | Information disclosure | Agent exports customer emails | Export permission, masking, export audit |
 | Denial of service | Approval flood | Rate limits, WAF |
@@ -450,16 +466,14 @@ The full threat model is in `docs/threat-model.md`.
 
 ## 14. Observability
 
-| Signal | Content |
-|---|---|
-| Logs | JSON (pino). Fields: time, level, request_id, trace_id, tool, user_id, route, status, duration_ms. Redaction list for secrets and restricted fields. |
-| Traces | OpenTelemetry auto-instrumentation for HTTP, Postgres and outbound calls. Span attributes: tool, action, object ID. |
-| Metrics | `http_requests_total`, `http_request_duration_seconds`, `approvals_pending{tool,tier}`, `approval_age_seconds`, `outbox_depth{tool}`, `outbox_failed_total`, `reconciliation_exceptions_open{type}`, `execution_paused{tool}`, `audit_verify_ok`. |
-| Alerts | Outbox failed > 0; outbox depth > 100 for 10 min; exception open > 48 h; audit verify fails; execution paused > 1 h; error rate > 2% for 5 min; p95 latency > 1 s for 10 min. |
-| SLOs | Availability 99.9% monthly; approval-to-execution under 5 min for 99% of refunds. |
-| Runbooks | `docs/runbooks/`: refund stuck in executing; outbox failures; reconciliation exception; audit verify failed; provider outage; how to pause and resume execution. |
-
-Locally, the compose stack runs Jaeger and Prometheus. In production, the OpenTelemetry exporter sends to Azure Monitor Application Insights.
+| Signal | Prototype | Target design (Not built) |
+|---|---|---|
+| Logs | JSON logs (pino) with a request ID. Cookies, authorization headers and URLs are redacted. | Trace ID, tool and user ID in each line. |
+| Traces | None. Jaeger runs but receives no traces. | OpenTelemetry for HTTP, Postgres and outbound calls. |
+| Metrics | `approvals_pending{tool}`, `outbox_depth{tool}`, `reconciliation_exceptions_open{type}`, `execution_paused{tool}` on `/metrics`. | Request rate, errors, latency, approval age, failed outbox items, audit verify status. |
+| Alerts | None run locally. The Terraform `alerts` module defines alert rules. It is not applied. | Outbox failed > 0; outbox depth > 100 for 10 min; exception open > 48 h; audit verify fails; execution paused > 1 h; error rate > 2% for 5 min; p95 latency > 1 s for 10 min. |
+| SLOs | None measured. | Availability 99.9% monthly; approval-to-execution under 5 min for 99% of refunds. |
+| Runbooks | `docs/runbooks/` and `tools/feature-flags/runbooks/`. | Each alert links to a runbook. |
 
 ---
 
@@ -485,14 +499,14 @@ flowchart TB
 
 ```
 infra/terraform/
-  modules/ network, postgres, app_service, worker, key_vault, monitoring, storage_worm, front_door
+  modules/ network, postgres, app_service, worker, registry, key_vault, monitoring, alerts, storage_worm, front_door, identity
   envs/ dev, staging, prod   (separate state, separate subscription or resource group)
 ```
 
 1. CI runs `terraform fmt -check`, `terraform validate` and `tflint` on each PR (FR-CI-4).
-2. The prototype does not run `terraform apply`. Production apply needs a separate pipeline with manual approval.
-3. Postgres: geo-redundant backup can be set only at server creation, so the module sets it at creation. Default backup retention is 7 days; the module sets 35 days, the maximum. Microsoft states a typical RPO of up to 5 minutes for point-in-time restore, which meets NFR-AV-2.
-4. Database access: the web app, its staging slot, and the worker connect to PostgreSQL with their managed identities. No database password exists. The helper `packages/foundation/src/database.ts` gets an Entra access token for each new connection. Local Docker Compose sets `DATABASE_URL`, and the helper uses it first.
+2. The prototype does not run `terraform plan` or `terraform apply`. Nobody has applied the Terraform. There is no live Azure deployment. Production apply needs a separate pipeline with manual approval.
+3. Postgres: geo-redundant backup can be set only at server creation, so the module sets it at creation. Default backup retention is 7 days; the module sets 35 days, the maximum. Microsoft states a typical RPO of up to 5 minutes for point-in-time restore, which meets NFR-AV-2. Nobody has measured the RPO or the RTO for this design.
+4. Database access (design, not tested on Azure): the web app, its staging slot, and the worker connect to PostgreSQL with their managed identities. No database password exists. The helper `packages/foundation/src/database.ts` gets an Entra access token for each new connection. Local Docker Compose sets `DATABASE_URL`, and the helper uses it first.
 
 ### 15.3 Release process
 
@@ -516,12 +530,12 @@ infra/terraform/
 
 | Failure | Effect | Behaviour |
 |---|---|---|
-| Provider down | No execution | Outbox retries with backoff. Users can still request and approve. Alert after first failure batch. |
+| Provider down | No execution | Outbox retries with backoff. Users can still request and approve. An alert is production work. |
 | Provider timeout after it made the refund | Unknown result | Retry with same idempotency key returns the original refund. Reconciliation confirms. |
 | Worker stops during a call | Row stuck `in_flight` | Lease timeout returns it to `pending`. Idempotent retry. |
 | Duplicate webhook | — | Primary key on event ID. |
 | Database failover | Short write outage | Zone-redundant HA fails over automatically. Clients reconnect. Idempotency makes client retries safe. |
-| Region loss | Outage | Restore from geo-redundant backup in the paired region (RTO 4 h target). |
+| Region loss | Outage | Restore from geo-redundant backup in the paired region (RTO 4 h target, not tested). |
 | Audit write fails | Business change fails | Same transaction. The user sees an error and retries. |
 | Bad deploy | Errors | Slot swap back. Migrations are backward compatible. |
 
@@ -530,9 +544,8 @@ infra/terraform/
 ## 17. Performance and scale
 
 1. Search uses indexes and keyset pages. No `OFFSET` on large tables.
-2. Counts on large result sets use estimates above 10,000 rows, with "10,000+" in the UI.
-3. Postgres statement timeout: 5 seconds for user requests, 10 minutes for reconciliation.
-4. The seed has 100,000 charges locally. A test checks that search p95 is less than 500 ms on the seed. The production target (10 million) needs a load test in staging.
+2. Postgres statement timeout: 5 seconds for each query from the API.
+3. The seed has 100,000 charges locally. There is no automated performance test and no measured p95. The production target (10 million) needs a load test in staging.
 
 ---
 
@@ -541,10 +554,9 @@ infra/terraform/
 | Level | Scope | Tool |
 |---|---|---|
 | Unit | Policy tiers, state transitions, hash chain, masking, retry schedule | Vitest |
-| Integration | API with real Postgres: idempotency, concurrency (parallel requests on one charge), constraints, audit triggers, outbox, webhooks | Vitest + Testcontainers or CI Postgres service |
+| Integration | API with real Postgres: idempotency, concurrency (parallel requests on one charge), constraints, audit triggers, outbox, webhooks | Vitest against the Compose stack (skipped if the stack does not run) |
 | Permission matrix | Every (role, permission) pair for each tool, generated from the registry | Vitest |
-| Contract | Provider adapter against simulator; against Stripe test mode when a key exists | Vitest |
-| End to end | Acceptance criteria 1, 2, 7, 9, 11 through the browser with Keycloak sign-in | Playwright |
+| End to end | Sign-in and sign-out, refund request and approval, audit verify, Feature-Flag Panel production approval | Playwright |
 | Accessibility | Main pages | axe-core in Playwright |
 | Security | SAST, dependencies, secrets, image, IaC | Semgrep, npm audit, gitleaks, Trivy, tflint |
 | Architecture | Tools import only the public Foundation API | dependency-cruiser |
@@ -555,9 +567,9 @@ infra/terraform/
 
 | Activity | How Devin does it | Human role |
 |---|---|---|
-| Build a new tool | Playbook "Add an internal tool" in `.devin/`. A request from Slack or Linear starts a session. Devin runs `scripts/new-tool.ts`, writes the domain code and tests, and opens a PR. | Tool owner writes the request. An engineer reviews and merges. |
-| Change a policy | Devin changes configuration and tests, and opens a PR. Policy activation still needs a second approver in the app. | Finance approves. Engineer reviews. |
-| CI failure | A Devin Automation on CI failure opens a session that diagnoses and pushes a fix PR. | Engineer reviews. |
+| Build a new tool | Playbook "Add an internal tool" in `.devin/`. A request from Slack or Linear starts the work. Devin runs `scripts/new-tool.ts`, writes the domain code and tests, and opens a PR. | Tool owner writes the request. An engineer reviews and merges. |
+| Change a policy | Devin changes configuration and tests, and opens a PR. | Finance approves the change. Engineer reviews. |
+| CI failure | A Devin Automation on CI failure diagnoses the failure and opens a fix PR. | Engineer reviews. |
 | Dependency and security updates | Dependabot opens PRs. Devin fixes breaking changes. | Engineer reviews. |
 | Incident triage | A Devin Automation on an alert reads logs and traces and proposes a fix or a runbook action. | On-call engineer decides. |
 
@@ -574,7 +586,7 @@ Devin does not host, operate or carry the pager. The company does.
 | Stack | TypeScript, Fastify, React, Postgres | Retool or another low-code; Python | One language front to back; strong types for money and policy; widely known |
 | Deployment | One app service plus one worker | One service for each tool | Operations cost stays flat as tools increase |
 | Approval logic | Generic engine in Foundation | Per-tool code | One place to audit separation of duties |
-| Audit integrity | Hash chain plus WORM anchor | Plain table; external ledger database | Strong evidence with no new database product |
+| Audit integrity | Hash chain; WORM anchor in production | Plain table; external ledger database | Strong evidence with no new database product |
 | Side effects | Outbox plus idempotency keys | Direct calls in the request | No lost or duplicate effects when processes stop |
 | Identity locally | Keycloak (real OIDC) | Mock role switcher | Same protocol as Entra ID; tests the real session code |
 | Payments locally | Simulator with fault injection | Stripe test mode only | No secrets needed; can force rare failures in tests |
@@ -591,10 +603,11 @@ Devin does not host, operate or carry the pager. The company does.
 | Payments | Simulator (Stripe test mode optional) | Provider live account |
 | Hosting | Docker Compose | Azure App Service, Postgres Flexible Server |
 | Secrets | `.env.example` with local values | Key Vault with managed identity |
-| Audit anchor | Local file export | Immutable blob storage, SIEM |
-| Observability | Jaeger, Prometheus | Application Insights, pager integration |
+| Audit anchor | None. Verify on demand only. | Immutable blob storage, SIEM |
+| Observability | Prometheus metrics, JSON logs. Jaeger with no traces. | Application Insights, pager integration |
 | Terraform | Validated in CI | Applied through approved pipeline |
 | Compliance | Threat model, control list | Pen test, SOC 2 scope, PCI scope confirmation |
+| Cost and DR | Not measured. Not tested. | Measured cost, tested recovery |
 
 ---
 

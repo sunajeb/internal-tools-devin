@@ -26,7 +26,11 @@ test.beforeAll(async () => {
 });
 
 async function capture(page: import('@playwright/test').Page, name: string) {
-  await page.screenshot({ path: resolve(screenshotDir, name), fullPage: true });
+  await page.screenshot({
+    path: resolve(screenshotDir, name),
+    fullPage: true,
+    animations: 'disabled',
+  });
 }
 
 test('login, search, request, approval, and audit verification', async ({
