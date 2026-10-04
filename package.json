@@ -1,0 +1,35 @@
+{
+  "name": "internal-tools-foundation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "services/*",
+    "tools/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n api,web,simulator \"npm run dev -w @internal-tools/api\" \"npm run dev -w @internal-tools/web\" \"npm run dev -w @internal-tools/payment-simulator\"",
+    "lint": "eslint .",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "e2e": "playwright test -c e2e/playwright.config.ts",
+    "new-tool": "tsx scripts/new-tool.ts",
+    "db:migrate": "tsx apps/api/src/migrate.ts",
+    "db:seed": "tsx apps/api/src/seed.ts",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.51.0",
+    "@types/node": "^22.13.10",
+    "concurrently": "^9.1.2",
+    "dependency-cruiser": "^16.10.2",
+    "eslint": "^9.22.0",
+    "@typescript-eslint/parser": "^8.26.0",
+    "prettier": "^3.5.3",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^5.0.3"
+  }
+}

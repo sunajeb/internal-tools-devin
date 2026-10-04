@@ -1,0 +1,19 @@
+{
+  "name": "@internal-tools/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/worker.ts",
+    "dev": "tsx watch src/worker.ts",
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@internal-tools/foundation": "*",
+    "pg": "^8.13.3",
+    "stripe": "^17.7.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.11"
+  }
+}

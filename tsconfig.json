@@ -1,0 +1,13 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/foundation" },
+    { "path": "./packages/testing" },
+    { "path": "./packages/ui-kit" },
+    { "path": "./tools/refunds" },
+    { "path": "./apps/api" },
+    { "path": "./apps/worker" },
+    { "path": "./services/payment-simulator" },
+    { "path": "./apps/web" }
+  ]
+}

@@ -1,0 +1,160 @@
+services:
+  postgres:
+    image: postgres:16.8
+    environment:
+      POSTGRES_DB: internal_tools
+      POSTGRES_USER: tools
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-development-only}
+    ports: ['5432:5432']
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U tools -d internal_tools']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.1
+    command: ['start-dev', '--import-realm', '--health-enabled=true']
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: local-keycloak-admin
+      KC_HTTP_ENABLED: 'true'
+      KC_HOSTNAME_STRICT: 'false'
+      KC_HEALTH_ENABLED: 'true'
+    ports: ['8080:8080']
+    volumes:
+      - ./infra/keycloak:/opt/keycloak/data/import:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'exec 3<>/dev/tcp/127.0.0.1/9000']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  payment-simulator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ['npm', 'run', 'dev', '-w', '@internal-tools/payment-simulator']
+    environment:
+      PORT: 4000
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-local-webhook-secret-change-before-deploy}
+      SIM_ADMIN_TOKEN: ${SIM_ADMIN_TOKEN:-local-simulator-admin}
+      API_URL: http://api:3000
+      SIMULATOR_STATE_FILE: /data/refunds.json
+    volumes:
+      - simulator-data:/data
+    ports: ['4000:4000']
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command:
+      [
+        'sh',
+        '-c',
+        'npm run db:migrate && npm run db:seed && npm run dev -w @internal-tools/api',
+      ]
+    environment:
+      NODE_ENV: development
+      APP_ENV: LOCAL
+      PORT: 3000
+      DATABASE_URL: postgres://tools:${POSTGRES_PASSWORD:-local-development-only}@postgres:5432/internal_tools
+      SESSION_SECRET: ${SESSION_SECRET:-local-session-secret-change-before-deploy}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-local-webhook-secret-change-before-deploy}
+      OIDC_CLIENT_ID: internal-tools
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-local-client-secret}
+      OIDC_ISSUER: http://keycloak:8080/realms/internal-tools
+      OIDC_REDIRECT_URI: http://localhost:5173/auth/callback
+      OIDC_PUBLIC_BASE_URL: http://localhost:8080
+      COOKIE_NAME: sid
+      SIMULATOR_URL: http://payment-simulator:4000
+    ports: ['3000:3000']
+    depends_on:
+      postgres: { condition: service_healthy }
+      keycloak: { condition: service_healthy }
+      payment-simulator: { condition: service_healthy }
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ['npm', 'run', 'start', '-w', '@internal-tools/worker']
+    environment:
+      DATABASE_URL: postgres://tools:${POSTGRES_PASSWORD:-local-development-only}@postgres:5432/internal_tools
+      SIMULATOR_URL: http://payment-simulator:4000
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+    depends_on:
+      api: { condition: service_healthy }
+      payment-simulator: { condition: service_healthy }
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command:
+      [
+        'npm',
+        'run',
+        'dev',
+        '-w',
+        '@internal-tools/web',
+        '--',
+        '--host',
+        '0.0.0.0',
+      ]
+    environment:
+      API_PROXY_TARGET: http://api:3000
+    ports: ['5173:5173']
+    depends_on:
+      api: { condition: service_healthy }
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.67.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: 'true'
+    ports: ['16686:16686', '4317:4317', '4318:4318']
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    command: ['--config.file=/etc/prometheus/prometheus.yml']
+    volumes:
+      - ./infra/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports: ['9090:9090']
+    depends_on: [api]
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  simulator-data:
