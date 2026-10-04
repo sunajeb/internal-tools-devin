@@ -98,6 +98,8 @@ interface CaseRow {
   pending_approval_id: string | null;
 }
 
+type QueueRow = CaseRow & { cursor_at?: string };
+
 type Context = FoundationContext<unknown, unknown, unknown>;
 
 function statusError(message: string, statusCode: number): never {
@@ -157,9 +159,8 @@ function likePrefix(value: string): string {
   return `${value.replace(/[\\%_]/g, (match) => `\\${match}`)}%`;
 }
 
-function cursorValue(row: CaseRow, sort: SortKey): string | number {
-  if (sort === 'risk_score') return row.risk_score;
-  return new Date(row[sort]).toISOString();
+function cursorValue(row: QueueRow, sort: SortKey): string | number {
+  return sort === 'risk_score' ? row.risk_score : row.cursor_at!;
 }
 
 async function lockCase(tx: Context['tx'], id: string): Promise<CaseRow> {
@@ -347,8 +348,12 @@ export const kycRoutes = [
         );
       }
       const limit = add(query.limit + 1);
-      const result = await tx.query<CaseRow>(
-        `SELECT ${caseColumns} FROM kyc.cases
+      const cursorAt =
+        query.sort === 'risk_score'
+          ? ''
+          : `,to_char(${column} AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_at`;
+      const result = await tx.query<QueueRow>(
+        `SELECT ${caseColumns}${cursorAt} FROM kyc.cases
          ${filters.length ? `WHERE ${filters.join(' AND ')}` : ''}
          ORDER BY ${column} ${direction}, id ${direction}
          LIMIT ${limit}`,
@@ -358,7 +363,9 @@ export const kycRoutes = [
       const rows = result.rows.slice(0, query.limit);
       const last = rows.at(-1);
       return {
-        items: rows.map((row) => present(row, mask)),
+        items: rows.map(({ cursor_at: _cursorAt, ...row }) =>
+          present(row, mask),
+        ),
         nextCursor:
           hasMore && last
             ? encodeCursor(cursorValue(last, query.sort), last.id)

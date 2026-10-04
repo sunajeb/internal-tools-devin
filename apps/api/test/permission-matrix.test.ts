@@ -10,6 +10,8 @@ const personaRoles = {
   auditor: ['auditor'],
   platform_admin: ['platform_admin'],
   agent_supervisor: ['agent', 'supervisor'],
+  kyc_analyst: ['kyc_analyst'],
+  kyc_lead: ['kyc_lead'],
   no_role: [],
 } satisfies Record<string, string[]>;
 type PersonaName = keyof typeof personaRoles;
@@ -23,6 +25,8 @@ const readers: PersonaName[] = [
   'agent_supervisor',
 ];
 const approvers: PersonaName[] = ['supervisor', 'finance', 'agent_supervisor'];
+const kycReaders: PersonaName[] = ['kyc_analyst', 'kyc_lead', 'auditor'];
+const kycWorkers: PersonaName[] = ['kyc_analyst', 'kyc_lead'];
 const permissionDenied = 'You do not have permission to perform this action.';
 
 interface Fixture {
@@ -150,6 +154,81 @@ const cases: MatrixCase[] = [
       method: 'POST',
       url: '/api/admin/pause',
       body: { paused: f.paused },
+    }),
+  },
+  {
+    route: 'GET /api/tools/kyc/cases',
+    registered: true,
+    allowed: kycReaders,
+    allowedStatus: 200,
+    request: () => ({ method: 'GET', url: '/api/tools/kyc/cases?limit=5' }),
+  },
+  {
+    route: 'GET /api/tools/kyc/cases/:id',
+    registered: true,
+    allowed: kycReaders,
+    allowedStatus: 404,
+    request: () => ({
+      method: 'GET',
+      url: `/api/tools/kyc/cases/${randomUUID()}`,
+    }),
+  },
+  {
+    route: 'POST /api/tools/kyc/cases/:id/reveal',
+    registered: true,
+    allowed: kycWorkers,
+    allowedStatus: 404,
+    request: () => ({
+      method: 'POST',
+      url: `/api/tools/kyc/cases/${randomUUID()}/reveal`,
+      body: { field: 'national_id', reason: 'Security matrix test reveal.' },
+    }),
+  },
+  {
+    route: 'POST /api/tools/kyc/cases/:id/claim',
+    registered: true,
+    allowed: kycWorkers,
+    allowedStatus: 404,
+    request: () => ({
+      method: 'POST',
+      url: `/api/tools/kyc/cases/${randomUUID()}/claim`,
+      headers: { 'idempotency-key': randomUUID() },
+    }),
+  },
+  {
+    route: 'POST /api/tools/kyc/cases/:id/approve',
+    registered: true,
+    allowed: kycWorkers,
+    allowedStatus: 404,
+    request: () => ({
+      method: 'POST',
+      url: `/api/tools/kyc/cases/${randomUUID()}/approve`,
+      headers: { 'idempotency-key': randomUUID() },
+      body: { note: 'Security matrix test.' },
+    }),
+  },
+  {
+    route: 'POST /api/tools/kyc/cases/:id/reject',
+    registered: true,
+    allowed: kycWorkers,
+    allowedStatus: 404,
+    request: () => ({
+      method: 'POST',
+      url: `/api/tools/kyc/cases/${randomUUID()}/reject`,
+      headers: { 'idempotency-key': randomUUID() },
+      body: { reason: 'Security matrix test.' },
+    }),
+  },
+  {
+    route: 'POST /api/tools/kyc/cases/:id/escalate',
+    registered: true,
+    allowed: kycWorkers,
+    allowedStatus: 404,
+    request: () => ({
+      method: 'POST',
+      url: `/api/tools/kyc/cases/${randomUUID()}/escalate`,
+      headers: { 'idempotency-key': randomUUID() },
+      body: { reason: 'Security matrix test.' },
     }),
   },
   {

@@ -507,7 +507,7 @@ const routes = [
           'SELECT status,count(*)::int AS count FROM refunds.refunds GROUP BY status',
         ),
         tx.query(
-          "SELECT count(*)::int AS count FROM foundation.approval_requests WHERE status='pending'",
+          "SELECT count(*)::int AS count FROM foundation.approval_requests WHERE status='pending' AND tool_id='refunds'",
         ),
         tx.query(
           "SELECT count(*)::int AS count FROM refunds.reconciliation_exceptions WHERE status='open'",

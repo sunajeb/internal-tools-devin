@@ -41,7 +41,11 @@ SELECT
   countries[((n * 7) % 12) + 1],
   risk,
   case_status,
-  CASE WHEN case_status = 'new' THEN NULL ELSE 'seed-analyst-' || (n % 5 + 1) END,
+  CASE
+    WHEN case_status = 'new' THEN NULL
+    WHEN case_status = 'in_review' THEN 'kyc-analyst'
+    ELSE 'seed-analyst-' || (n % 5 + 1)
+  END,
   opened_at + CASE WHEN risk >= 70 THEN interval '24 hours' ELSE interval '72 hours' END,
   opened_at,
   opened_at,

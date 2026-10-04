@@ -448,6 +448,29 @@ describe('KYC keyset pagination', () => {
     }
   });
 
+  it('keeps microsecond timestamps apart across pages', async () => {
+    const ids = [
+      await createCase(10),
+      await createCase(20),
+      await createCase(30),
+    ];
+    await pool.query(
+      `UPDATE kyc.cases SET country='QZ',
+         created_at=timestamptz '2020-01-01 00:00:00.000100+00'
+           + (array_position($1::uuid[], id) * interval '100 microseconds')
+       WHERE id = ANY($1::uuid[])`,
+      [ids],
+    );
+    for (const dir of ['asc', 'desc']) {
+      const seen = (
+        await walk(`country=QZ&sort=created_at&dir=${dir}&limit=1`, 5)
+      )
+        .flat()
+        .map((item) => item.id);
+      expect(seen).toEqual(dir === 'asc' ? ids : [...ids].reverse());
+    }
+  });
+
   it('rejects a changed page token', async () => {
     const response = await call(
       auditor,
