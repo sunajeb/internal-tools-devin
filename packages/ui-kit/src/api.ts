@@ -3,8 +3,9 @@ export async function api<T>(
   options: RequestInit = {},
 ): Promise<T> {
   const headers = new Headers(options.headers);
-  if (options.body && !headers.has('content-type'))
+  if (options.body && !headers.has('content-type')) {
     headers.set('content-type', 'application/json');
+  }
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(options.method ?? 'GET')) {
     const csrf = document.cookie
       .split('; ')
@@ -18,8 +19,9 @@ export async function api<T>(
     credentials: 'include',
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok)
+  if (!response.ok) {
     throw new Error(data.error ?? `Request failed (${response.status})`);
+  }
   return data as T;
 }
 

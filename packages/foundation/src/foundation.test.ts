@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest';
+import Fastify from 'fastify';
+import pg from 'pg';
+import { z } from 'zod';
 import {
   approveStep,
   assertRoutesHavePermissions,
+  configureFoundation,
   definePolicy,
+  defineRoute,
   defineTool,
   genesisHash,
   hashAuditEvent,
   maskValue,
+  registerTool,
   retryDelayMs,
   tierFor,
   verifyAuditChain,
@@ -22,6 +28,54 @@ describe('Foundation controls', () => {
     expect(() => assertRoutesHavePermissions([{ path: '/unsafe' }])).toThrow(
       'Routes require permissions',
     );
+  });
+
+  it('rejects tool routes with missing or undeclared permissions', async () => {
+    const { Pool } = pg;
+    const app = Fastify();
+    const pool = new Pool({
+      connectionString: 'postgres://tools:tools@localhost:5432/internal_tools',
+    });
+    configureFoundation(app, {
+      pool,
+      currentUser: async () => undefined,
+      verifyCsrf: () => true,
+    });
+    const tool = defineTool({
+      id: 'sample',
+      name: 'Sample',
+      owner: 'owner@example.test',
+      dataClass: 'internal' as const,
+      roles: { agent: { idpGroup: 'agent' } },
+      permissions: { 'sample.read': ['agent'] },
+    });
+    expect(() =>
+      registerTool(app, {
+        tool,
+        routes: [
+          defineRoute({
+            method: 'GET',
+            path: '/api/sample',
+            permission: 'sample.write',
+            handler: () => ({ ok: true }),
+          }),
+        ],
+      }),
+    ).toThrow('Tool sample routes require a declared permission');
+    await app.close();
+    await pool.end();
+  });
+
+  it('defines route schemas and idempotency in its shared API', () => {
+    const route = defineRoute({
+      method: 'POST',
+      path: '/api/sample',
+      permission: 'sample.write',
+      body: z.object({ name: z.string() }),
+      idempotent: true,
+      handler: () => ({ ok: true }),
+    });
+    expect(route.idempotent).toBe(true);
   });
 
   it('denies missing users and roles by default', async () => {

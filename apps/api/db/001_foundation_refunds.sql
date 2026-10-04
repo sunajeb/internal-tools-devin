@@ -67,8 +67,11 @@ CREATE TABLE IF NOT EXISTS foundation.approval_requests (
   status text NOT NULL CHECK (status IN ('pending','approved','rejected','cancelled','expired')),
   created_at timestamptz NOT NULL DEFAULT now(),
   expires_at timestamptz NOT NULL,
-  decided_at timestamptz
+  decided_at timestamptz,
+  summary jsonb NOT NULL DEFAULT '{}'
 );
+ALTER TABLE foundation.approval_requests
+  ADD COLUMN IF NOT EXISTS summary jsonb NOT NULL DEFAULT '{}';
 CREATE INDEX IF NOT EXISTS approvals_expiry_idx ON foundation.approval_requests(expires_at) WHERE status='pending';
 
 CREATE TABLE IF NOT EXISTS foundation.approvals (

@@ -1,4 +1,14 @@
-import { pool } from './db.js';
+import { readdir, readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
+import pg from 'pg';
+
+const pool = new pg.Pool({
+  connectionString:
+    process.env.MIGRATION_DATABASE_URL ??
+    process.env.DATABASE_URL ??
+    'postgres://tools:tools@localhost:5432/internal_tools',
+});
 
 await pool.query(`
   INSERT INTO refunds.charges (id, customer_id, customer_email, card_brand, card_last4, amount_minor, currency, created_at)
@@ -67,5 +77,17 @@ await pool.query(`
   VALUES ('refunds','provider-ghost-demo','missing_internal','{"providerRefundId":"pr_ghost_demo","amountMinor":12000}')
   ON CONFLICT DO NOTHING
 `);
+const toolsDirectory = fileURLToPath(
+  new URL('../../../tools', import.meta.url),
+);
+for (const entry of (await readdir(toolsDirectory, { withFileTypes: true }))
+  .filter((item) => item.isDirectory())
+  .sort((first, second) => first.name.localeCompare(second.name))) {
+  const seedFile = join(toolsDirectory, entry.name, 'seed.sql');
+  const sql = await readFile(seedFile, 'utf8').catch(() => undefined);
+  if (sql) await pool.query(sql);
+}
 await pool.end();
-console.log('Seeded 100,000 synthetic charges and demo records.');
+console.log(
+  'Seeded 100,000 synthetic charges, tool seed files and demo records.',
+);

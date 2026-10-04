@@ -10,5 +10,9 @@
     "composite": true,
     "allowImportingTsExtensions": true
   },
+  "references": [
+    { "path": "../../packages/ui-kit" },
+    { "path": "../../tools/refunds" }
+  ],
   "include": ["src"]
 }

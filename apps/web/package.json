@@ -8,6 +8,8 @@
     "build": "tsc -b && vite build"
   },
   "dependencies": {
+    "@internal-tools/refunds": "*",
+    "@internal-tools/ui-kit": "*",
     "@tanstack/react-query": "^5.66.9",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",

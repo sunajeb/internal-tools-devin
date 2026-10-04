@@ -75,7 +75,9 @@ services:
       NODE_ENV: development
       APP_ENV: LOCAL
       PORT: 3000
-      DATABASE_URL: postgres://tools:${POSTGRES_PASSWORD:-local-development-only}@postgres:5432/internal_tools
+      MIGRATION_DATABASE_URL: postgres://tools:${POSTGRES_PASSWORD:-local-development-only}@postgres:5432/internal_tools
+      RUNTIME_DB_PASSWORD: ${RUNTIME_DB_PASSWORD:-local-runtime-only}
+      DATABASE_URL: postgres://app_runtime:${RUNTIME_DB_PASSWORD:-local-runtime-only}@postgres:5432/internal_tools
       SESSION_SECRET: ${SESSION_SECRET:-local-session-secret-change-before-deploy}
       WEBHOOK_SECRET: ${WEBHOOK_SECRET:-local-webhook-secret-change-before-deploy}
       OIDC_CLIENT_ID: internal-tools
@@ -109,7 +111,7 @@ services:
       dockerfile: Dockerfile
     command: ['npm', 'run', 'start', '-w', '@internal-tools/worker']
     environment:
-      DATABASE_URL: postgres://tools:${POSTGRES_PASSWORD:-local-development-only}@postgres:5432/internal_tools
+      DATABASE_URL: postgres://app_runtime:${RUNTIME_DB_PASSWORD:-local-runtime-only}@postgres:5432/internal_tools
       SIMULATOR_URL: http://payment-simulator:4000
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
     depends_on:

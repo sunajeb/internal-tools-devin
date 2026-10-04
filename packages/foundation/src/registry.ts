@@ -1,3 +1,6 @@
+import type { z } from 'zod';
+import type { FoundationContext } from './runtime.js';
+
 export type DataClass = 'public' | 'internal' | 'confidential' | 'restricted';
 
 export interface ToolDefinition {
@@ -7,6 +10,7 @@ export interface ToolDefinition {
   dataClass: DataClass;
   roles: Record<string, { idpGroup: string }>;
   permissions: Record<string, string[]>;
+  approvalPermissions?: Record<string, string>;
   approvalRules?: Record<string, unknown>;
 }
 
@@ -17,16 +21,24 @@ export function defineTool<T extends ToolDefinition>(tool: T): T {
   return Object.freeze(tool);
 }
 
-export interface RouteDefinition<T = unknown> {
+export interface RouteDefinition<
+  Params = unknown,
+  Query = unknown,
+  Body = unknown,
+> {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
   permission: string;
-  schema?: unknown;
+  params?: z.ZodType<Params>;
+  query?: z.ZodType<Query>;
+  body?: z.ZodType<Body>;
   idempotent?: boolean;
-  handler: (input: T) => unknown;
+  handler: (context: FoundationContext<Params, Query, Body>) => unknown;
 }
 
-export function defineRoute<T>(route: RouteDefinition<T>): RouteDefinition<T> {
+export function defineRoute<Params = unknown, Query = unknown, Body = unknown>(
+  route: RouteDefinition<Params, Query, Body>,
+): RouteDefinition<Params, Query, Body> {
   if (!route.permission)
     throw new Error(`Route ${route.path} has no permission`);
   return route;

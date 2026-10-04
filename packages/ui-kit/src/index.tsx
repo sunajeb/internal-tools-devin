@@ -1,7 +1,8 @@
 import type { PropsWithChildren, ReactNode } from 'react';
+export { api, dateTime, money } from './api.js';
 
 export function Layout({ children }: PropsWithChildren) {
-  return <main className="shared-layout">{children}</main>;
+  return <div className="shared-layout">{children}</div>;
 }
 
 export function DataTable<T>({
