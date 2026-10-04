@@ -14,7 +14,7 @@ import {
 } from './registry.js';
 
 const basePath = '/api/tools/feature-flags';
-export const flagKeyPattern = /^[a-z][a-z0-9_.-]{2,63}$/;
+const flagKeyPattern = /^[a-z][a-z0-9_.-]{2,63}$/;
 
 const KeyParams = z.object({ key: z.string().regex(flagKeyPattern) });
 const EnvironmentParams = KeyParams.extend({
@@ -29,7 +29,7 @@ const HistoryQuery = z.object({
   before: z.coerce.number().int().positive().optional(),
   limit: z.coerce.number().int().min(1).max(200).default(100),
 });
-export const ChangeBody = z.object({
+const ChangeBody = z.object({
   enabled: z.boolean(),
   rolloutPercent: z.number().int().min(0).max(100),
   expectedVersion: z.number().int().min(1),
@@ -42,7 +42,7 @@ function statusError(message: string, statusCode: number) {
   return Object.assign(new Error(message), { statusCode });
 }
 
-export function productionChangeHash(change: {
+function productionChangeHash(change: {
   changeRequestId: string;
   flagKey: string;
   enabled: boolean;

@@ -4,7 +4,6 @@ export const featureFlagsToolId = 'feature-flags';
 export const productionChangeAction = 'feature-flags.production_change';
 
 export const environments = ['development', 'staging', 'production'] as const;
-export type FlagEnvironment = (typeof environments)[number];
 
 export const featureFlagsTool = defineTool({
   id: featureFlagsToolId,

@@ -19,7 +19,6 @@ CREATE TABLE IF NOT EXISTS feature_flags.flag_environments (
   PRIMARY KEY (flag_id, environment)
 );
 
--- A production change waits here until a flag approver decides on the Foundation approval.
 CREATE TABLE IF NOT EXISTS feature_flags.change_requests (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   flag_id uuid NOT NULL REFERENCES feature_flags.flags(id) ON DELETE CASCADE,

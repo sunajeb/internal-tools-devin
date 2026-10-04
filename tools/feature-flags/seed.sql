@@ -1,4 +1,3 @@
--- Synthetic feature flags for local demonstration. The statements are safe to run again.
 WITH seed(key, description, owner, dev_on, dev_pct, stg_on, stg_pct, prod_on, prod_pct) AS (
   VALUES
     ('checkout.new_summary', 'Show the new order summary on the checkout page.', 'payments-web@company.example', true, 100, true, 100, true, 50),
@@ -33,7 +32,6 @@ CROSS JOIN LATERAL (VALUES
 ) AS state(environment, enabled, rollout_percent)
 ON CONFLICT DO NOTHING;
 
--- One pending production change, so that the approval inbox has an item for flag-approver.
 WITH target AS (
   SELECT f.id AS flag_id, f.key, e.enabled, e.rollout_percent, e.version
   FROM feature_flags.flags f

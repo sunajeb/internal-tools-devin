@@ -14,6 +14,7 @@ import {
   ErrorState,
   LoadingState,
 } from '@internal-tools/ui-kit';
+import './feature-flags.css';
 
 type User = { id: string; displayName: string; roles: string[] };
 const environmentNames = ['development', 'staging', 'production'] as const;
@@ -86,7 +87,7 @@ const actionLabels: Record<string, string> = {
   'approval.duplicate_denied': 'Duplicate approval refused',
 };
 
-export const featureFlagsNavigation = [
+const featureFlagsNavigation = [
   { to: base, label: 'Feature flags', icon: Flag, roles: readRoles },
   {
     to: `${base}/approvals`,
@@ -318,12 +319,12 @@ function EnvironmentForm({
     save.mutate();
   };
   return (
-    <form className="panel" style={{ padding: 18 }} onSubmit={submit}>
-      <fieldset style={{ border: 0, margin: 0, padding: 0 }} disabled={locked}>
+    <form className="panel flag-env" onSubmit={submit}>
+      <fieldset className="flag-fieldset" disabled={locked}>
         <legend className="section-subtitle">
           <b>{environmentLabels[environment]}</b>
         </legend>
-        <div className="detail-list" style={{ gridTemplateColumns: '1fr' }}>
+        <div className="detail-list flag-detail-list">
           <div className="detail-row">
             <span>Current state</span>
             <b>
@@ -338,7 +339,7 @@ function EnvironmentForm({
           </div>
         </div>
         <label className="field-label" htmlFor={`${id}-enabled`}>
-          <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span className="flag-check">
             <input
               id={`${id}-enabled`}
               type="checkbox"
@@ -351,20 +352,20 @@ function EnvironmentForm({
         <label className="field-label" htmlFor={`${id}-rollout`}>
           Rollout percent for {environment}
         </label>
-        <input
-          id={`${id}-rollout`}
-          className="money-input"
-          style={{ width: '100%', padding: '0 10px' }}
-          type="number"
-          inputMode="numeric"
-          min={0}
-          max={100}
-          step={1}
-          required
-          aria-describedby={`${id}-rollout-hint`}
-          value={rollout}
-          onChange={(event) => setRollout(event.target.value)}
-        />
+        <div className="money-input">
+          <input
+            id={`${id}-rollout`}
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={100}
+            step={1}
+            required
+            aria-describedby={`${id}-rollout-hint`}
+            value={rollout}
+            onChange={(event) => setRollout(event.target.value)}
+          />
+        </div>
         <p id={`${id}-rollout-hint`} className="field-hint">
           Use a whole number from 0 to 100.
         </p>
@@ -375,8 +376,7 @@ function EnvironmentForm({
             </label>
             <textarea
               id={`${id}-reason`}
-              className="money-input"
-              style={{ width: '100%', height: 70, padding: 10 }}
+              className="flag-reason"
               required
               minLength={10}
               maxLength={500}
@@ -389,7 +389,7 @@ function EnvironmentForm({
             </p>
           </>
         )}
-        <div className="modal-actions" style={{ marginTop: 14 }}>
+        <div className="modal-actions">
           <button
             type="submit"
             className="primary-btn"
@@ -553,14 +553,7 @@ function FlagDetailPage({ user }: { user: User }) {
           </Link>
         }
       />
-      <div
-        style={{
-          display: 'grid',
-          gap: 16,
-          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-          marginBottom: 16,
-        }}
-      >
+      <div className="flag-env-grid">
         {environmentNames.map((environment) => {
           const state = data.environments[environment];
           return (
