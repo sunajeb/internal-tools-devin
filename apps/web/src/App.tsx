@@ -93,10 +93,22 @@ function Shell({ session }: { session: Session }) {
   const visibleLinks = allLinks.filter((item) =>
     item.roles.some((role) => user.roles.includes(role)),
   );
+  const matchesPath = (to: string) =>
+    to === '/'
+      ? location.pathname === '/'
+      : location.pathname === to || location.pathname.startsWith(`${to}/`);
   const active =
-    visibleLinks.find((item) => item.to === location.pathname) ??
+    visibleLinks
+      .filter((item) => matchesPath(item.to))
+      .sort((a, b) => b.to.length - a.to.length)[0] ??
     visibleLinks[0] ??
     allLinks[0]!;
+  const landingRedirect =
+    location.pathname === '/' &&
+    visibleLinks.length > 0 &&
+    !visibleLinks.some((item) => item.to === '/')
+      ? visibleLinks[0]!.to
+      : undefined;
   const activeTool =
     webToolRegistry.find((tool) =>
       tool.navigation.some((item) => item.to === active.to),
@@ -210,19 +222,23 @@ function Shell({ session }: { session: Session }) {
           </div>
         )}
         <Layout>
-          <Routes>
-            {webToolRegistry.map((tool) => {
-              const Pages = tool.Pages;
-              return (
-                <Route
-                  key={tool.id}
-                  path={tool.routePath}
-                  element={<Pages user={user} />}
-                />
-              );
-            })}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          {landingRedirect ? (
+            <Navigate to={landingRedirect} replace />
+          ) : (
+            <Routes>
+              {webToolRegistry.map((tool) => {
+                const Pages = tool.Pages;
+                return (
+                  <Route
+                    key={tool.id}
+                    path={tool.routePath}
+                    element={<Pages user={user} />}
+                  />
+                );
+              })}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          )}
         </Layout>
       </div>
     </div>
