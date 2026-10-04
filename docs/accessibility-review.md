@@ -43,6 +43,13 @@ The test signs in with the local Keycloak users. It opens each screen with the r
 - Focus goes back to the control that opened the dialog.
 - The refund dialog puts focus on the amount field.
 - A submit with a short note moves focus to the note field and shows a message.
+- Escape closes the payment detail dialog at once, before any Tab key press.
+- Key-by-key entry of 2, 5, 0 in the refund amount field gives `250`.
+- The Amount and Date column headings sort the payments and set `aria-sort`.
+- "Reveal email" asks for a reason first. The email stays masked until the user sends a reason of 10 or more characters.
+- The approval inbox shows no `NaN` amount.
+
+The test runs with `reducedMotion: 'reduce'`. Axe then scans a dialog after its open animation is complete.
 
 ## 3. Issues and fixes
 
@@ -100,6 +107,19 @@ Severity: **S** = axe "serious" (blocks the test). **M** = WCAG failure that axe
 | 36  | UX   | Link and button text was not clear out of context: "View all", "Export", "Reveal", "Close".                                                                              | New text: "View all refunds", "Export audit CSV", "Reveal email", "Close dialog".                                                                                                                                             |
 | 37  | M    | Refund history and the refund timeline were `<div>` lists.                                                                                                               | They are `<ul>` and `<ol>` with names. The timeline shows a message when it has no events.                                                                                                                                    |
 
+### 3.4 Defects from the recorded E2E run on the base branch
+
+| #   | Type | Issue                                                                                                                          | Fix                                                                                                                                                                                                                                                                                                       |
+| --- | ---- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 38  | UX   | Key-by-key entry of 2, 5, 0 in the refund amount field gave `0.00`, not `250`.                                                 | Issue 20 fixes this: the field is a text field that keeps the typed text. The test now types `250` and `12.5` key by key and checks the value.                                                                                                                                                            |
+| 39  | UX   | "Reveal" showed the customer email at once. The audit event did not store a reason.                                            | "Reveal email" opens a form with a "Reason for reveal" field. The field gets focus. The API requires a reason of 10 to 500 characters and returns 400 if the reason is missing. The `customer.email_revealed` audit event stores the reason in `after.reason`. Cancel moves focus back to "Reveal email". |
+| 40  | UX   | After a dual approval (Supervisor, then Finance), the refund timeline showed only the Finance approval.                        | The Foundation writes each approval step against the `approval_request` object. The refund detail route now also reads the audit events of the refund's approval request, in `seq` order. The timeline shows "Approval step 1 approved" and "Approval step 2 approved" with the approver and role.        |
+| 41  | UX   | The approval inbox showed seeded entries as "$NaN refund request". The seed created approval requests with an empty `summary`. | The seed writes the refund summary (amount, currency, payment, note) and fills empty summaries of seeded rows. The card shows "Refund request" with no amount if a summary has no amount. It never shows `NaN`.                                                                                           |
+| 42  | M    | The Payments table had no sort.                                                                                                | The Amount and Date headings contain a sort button. The API accepts `sort=date_desc                                                                                                                                                                                                                       | date_asc | amount_desc | amount_asc`from a fixed list and sorts in SQL. The page token holds the sort key, so pages stay in order. A sort change goes back to page 1. The heading has`aria-sort="ascending"`, `"descending"`or`"none"`. |
+| 43  | M    | Escape did not close the payment detail dialog until focus moved with Tab.                                                     | The shared `Dialog` listens for Escape on the document from the first render and moves focus into the dialog. The test presses Escape at once after the click.                                                                                                                                            |
+| 44  | UX   | The Overview showed the "Open approval inbox" link to an agent. The agent cannot open that page.                               | The link shows only for roles that can open the approval inbox.                                                                                                                                                                                                                                           |
+| 45  | M    | The dialog open animation can make axe measure text during a fade. CI then reported false contrast failures.                   | A `prefers-reduced-motion: reduce` rule removes the animations. The test uses reduced motion.                                                                                                                                                                                                             |
+
 ## 4. Money formatting
 
 All amounts in the console use `money(amount_minor, currency)` from the UI kit. The review found no screen that formats money in a different way. Issue 13 makes the helper exact for all amounts and currencies.
@@ -113,4 +133,9 @@ All amounts in the console use `money(amount_minor, currency)` from the UI kit. 
 
 ## 6. Foundation
 
-We did not change `packages/foundation/**`. We found no Foundation defect during this review.
+We did not change `packages/foundation/**`. We found no Foundation defect.
+
+Two notes for tool authors:
+
+- The Foundation writes approval step events (`approval.approved`, `approval.rejected`) against the `approval_request` object, not against the target object. A tool that shows a history of an object must also read the events of its approval request (issue 40).
+- `GET /api/approvals` spreads `summary` into each item. A row with no summary has no amount. The seed in `apps/api/src/seed.ts` now writes the summary (issue 41).
