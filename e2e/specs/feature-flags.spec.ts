@@ -18,6 +18,7 @@ async function signIn(page: Page, username: string, password: string) {
       .getByRole('navigation', { name: 'Main navigation' })
       .getByRole('link', { name: 'Feature flags' }),
   ).toBeVisible({ timeout: 30_000 });
+  await expect(page).toHaveURL(/\/tools\/feature-flags/);
 }
 
 async function openApprovals(page: Page) {
