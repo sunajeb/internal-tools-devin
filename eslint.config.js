@@ -13,8 +13,6 @@ export default [
           allowDefaultProject: [
             'apps/api/drizzle.config.ts',
             'apps/web/vite.config.ts',
-            'e2e/playwright.config.ts',
-            'e2e/specs/*.spec.ts',
             'scripts/new-tool.ts',
             'vitest.config.ts',
           ],
