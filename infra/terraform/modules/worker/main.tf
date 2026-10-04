@@ -9,7 +9,6 @@ resource "azurerm_service_plan" "main" {
   tags                   = var.tags
 }
 
-# This private worker accepts no clients and is not user-facing; the web app owns Entra OIDC.
 #trivy:ignore:AZU-0001
 #trivy:ignore:AZU-0003
 resource "azurerm_linux_web_app" "main" {

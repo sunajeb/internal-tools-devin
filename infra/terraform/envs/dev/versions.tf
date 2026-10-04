@@ -16,8 +16,6 @@ terraform {
     }
   }
 
-  # Replace these placeholders with the bootstrapped state backend values.
-  # Use -backend-config or edit this block before initializing a real backend.
   backend "azurerm" {
     resource_group_name  = "REPLACE_ME"
     storage_account_name = "REPLACE_ME"

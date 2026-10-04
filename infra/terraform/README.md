@@ -50,6 +50,12 @@ Each environment defines its own backend key and resource settings. The `dev`, `
 The registry keeps public network access so GitHub-hosted runners can push images. Admin user and anonymous pull remain disabled.
 The client can move the registry behind a private endpoint and use self-hosted runners.
 
+- PostgreSQL geo-redundant backup can only be set at server creation. Changing it later replaces the server.
+- Each App Service plan integrates with one subnet, so the web app and the worker use separate delegated subnets.
+- Each slot has its own managed identity. Check the slot principal name in Entra ID before you create its PostgreSQL role.
+- Audit anchors use container-level WORM, so blob versioning stays disabled.
+- A locked immutability policy cannot be shortened or removed. Set `immutability_locked` to true only in production.
+
 ## Local validation
 
 Install Terraform 1.16.5, TFLint 0.64.0, and Trivy 0.75.0. TFLint uses the AzureRM ruleset 0.32.0.
@@ -130,4 +136,4 @@ The app must emit `outbox_failed_total` for its query alert to detect failed out
 | `AZU-0058` | Development and staging use required ZRS replication. Production uses GZRS.                                | `modules/storage_worm/main.tf`                          |
 | `AZU-0060` | This prototype uses platform-managed keys. The client owns future CMK provisioning and rotation.           | `modules/storage_worm/main.tf`                          |
 
-Each exception has a reason beside its inline Trivy directive.
+This table records the reason for each inline Trivy directive.

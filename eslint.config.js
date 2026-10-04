@@ -11,7 +11,6 @@ export default [
       parserOptions: {
         projectService: {
           allowDefaultProject: [
-            'apps/api/drizzle.config.ts',
             'apps/web/vite.config.ts',
             'e2e/playwright.config.ts',
             'e2e/specs/*.spec.ts',

@@ -40,7 +40,6 @@ function currencyFormatter(currency: string) {
   return formatter;
 }
 
-/** Number of minor-unit digits for an ISO 4217 currency (USD 2, JPY 0). */
 export function minorUnitDigits(currency = 'USD'): number {
   return (
     currencyFormatter(currency).resolvedOptions().maximumFractionDigits ?? 2
@@ -58,7 +57,6 @@ function toMinorBigInt(minor: string | number | bigint): bigint | undefined {
   }
 }
 
-/** Plain decimal text for an integer minor-unit amount, without grouping. */
 export function minorToDecimal(
   minor: string | number | bigint,
   currency = 'USD',
@@ -74,10 +72,6 @@ export function minorToDecimal(
   return `${negative ? '-' : ''}${whole}${digits ? `.${fraction}` : ''}`;
 }
 
-/**
- * Parses user input such as "12", "12.5" or "1,250.00" into integer minor
- * units. Returns undefined when the text is not a valid non-negative amount.
- */
 export function decimalToMinor(
   text: string,
   currency = 'USD',
@@ -95,11 +89,9 @@ export function decimalToMinor(
   ).toString();
 }
 
-/** Formats integer minor units with the currency's own decimal places. */
 export const money = (minor: string | number | bigint, currency = 'USD') => {
   const decimal = minorToDecimal(minor, currency);
   if (!decimal) return '—';
-  // Intl formats decimal strings exactly, so large amounts keep every digit.
   return currencyFormatter(currency).format(decimal as unknown as number);
 };
 

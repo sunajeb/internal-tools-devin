@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Generate a disposable tool in a copy of the repository and prove that it compiles and passes its tests.
 set -euo pipefail
 root="$(git rev-parse --show-toplevel)"
 workspace="$(mktemp -d)"
