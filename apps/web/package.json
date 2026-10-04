@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "5.2.8",
     "@internal-tools/refunds": "*",
     "@internal-tools/ui-kit": "*",
     "@tanstack/react-query": "^5.66.9",

@@ -97,7 +97,6 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "outbox_failed" {
     metric_measure_column   = "failed"
     operator                = "GreaterThan"
     threshold               = 0
-    # The application must emit the outbox_failed_total custom metric.
     failing_periods {
       minimum_failing_periods_to_trigger_alert = 1
       number_of_evaluation_periods             = 1

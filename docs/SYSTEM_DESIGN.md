@@ -57,7 +57,7 @@ flowchart LR
 | Web | Single-page app. Shared UI kit. One route group for each tool. | React, Vite, TypeScript, TanStack Query |
 | API | HTTP API and backend-for-frontend (BFF) session. Applies all Foundation middleware. Hosts tool routes. | Node.js, Fastify, TypeScript, Zod |
 | Worker | Sends outbox items, runs reconciliation, expires approvals, exports audit. Separate process, same code base. | Node.js, Postgres `SKIP LOCKED` queue |
-| Database | System of record for all tools. One schema for the Foundation, one schema for each tool. | PostgreSQL 16, Drizzle ORM and migrations |
+| Database | System of record for all tools. One schema for the Foundation, one schema for each tool. | PostgreSQL 16, `pg` and versioned SQL migrations |
 | Identity provider | Sign-in and groups. | Keycloak locally; Entra ID in production |
 | Payment simulator | Local stand-in for the provider: refunds API with idempotency keys, delays, failures, signed webhooks, list API for reconciliation. | Small Fastify service |
 | Observability | Traces, metrics, logs. | OpenTelemetry SDK; Jaeger and Prometheus locally; Azure Monitor in production |
@@ -423,7 +423,7 @@ Implementations: `SimulatorProvider` (default), `StripeProvider` (test mode, ena
 | Session theft | Short idle timeout, rotation at sign-in, IdP re-check |
 | CSRF | SameSite cookie plus double-submit token |
 | XSS | React escaping, strict CSP (`default-src 'self'`, no inline script), no `dangerouslySetInnerHTML` (lint rule) |
-| Injection | Parameterized queries only (Drizzle), Zod validation |
+| Injection | Parameterized queries only (`pg`), Zod validation |
 | Broken access control | Deny by default, route permission required, generated matrix tests |
 | Insider fraud | Separation of duties, approvals, daily limits, audit with anchors |
 | Duplicate money movement | Idempotency at API and provider, outbox, DB check constraint |

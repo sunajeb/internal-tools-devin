@@ -63,6 +63,15 @@ await pool.query(`
   FROM pending WHERE r.id::text=pending.object_id
 `);
 await pool.query(`
+  UPDATE foundation.approval_requests a SET summary=jsonb_build_object(
+    'refund_id',r.id::text,'charge_id',r.charge_id,'amount_minor',r.amount_minor::text,
+    'currency',r.currency,'reason_code',r.reason_code,'note',r.note,'status',r.status
+  )
+  FROM refunds.refunds r
+  WHERE a.tool_id='refunds' AND a.object_type='refund' AND a.object_id=r.id::text
+    AND a.summary='{}'::jsonb
+`);
+await pool.query(`
   INSERT INTO foundation.outbox(tool_id,kind,payload,idempotency_key,status)
   SELECT 'refunds','refund.execute',jsonb_build_object('refundId',r.id::text),r.id::text,'pending'
   FROM refunds.refunds r
