@@ -5,11 +5,13 @@ import {
   type FoundationRoute,
   type ToolRegistration,
 } from '@internal-tools/foundation';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { refundsTool } from './registry.js';
 import {
   dailyAutoRefundLimitMinor,
   refundableMinor,
+  refundPolicy,
   refundPolicyVersion,
   refundTier,
 } from './domain.js';
@@ -248,7 +250,7 @@ const routes = [
       const inserted = await tx.query(
         `INSERT INTO refunds.refunds(
            charge_id,amount_minor,currency,reason_code,note,requester_id,status,tier,policy_version
-         ) VALUES($1,$2::bigint,$3,$4,$5,$6,$7,$8,1)
+         ) VALUES($1,$2::bigint,$3,$4,$5,$6,$7,$8,$9)
          RETURNING id::text,charge_id,amount_minor::text,currency,reason_code,note,
                    requester_id,status,tier,created_at`,
         [
@@ -260,6 +262,7 @@ const routes = [
           user.id,
           status,
           tier.name,
+          refundPolicyVersion,
         ],
       );
       const refund = inserted.rows[0];
@@ -273,6 +276,9 @@ const routes = [
           policyVersion: refundPolicyVersion,
           contentHash: requestHash(input),
           steps,
+          expiresAt: new Date(
+            Date.now() + refundPolicy.expiresAfterHours * 60 * 60_000,
+          ),
           summary: {
             refund_id: refund.id,
             charge_id: refund.charge_id,
@@ -394,8 +400,8 @@ const routes = [
     method: 'POST',
     path: '/api/reconciliation/run',
     permission: 'exception.resolve',
-    handler: async ({ user, outbox, audit, requestId }) => {
-      const idempotencyKey = `reconciliation:${requestId}`;
+    handler: async ({ user, outbox, audit }) => {
+      const idempotencyKey = `reconciliation:${randomUUID()}`;
       await outbox.enqueue(
         'reconciliation.run',
         { requestedBy: user.id },
