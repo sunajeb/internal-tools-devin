@@ -118,14 +118,16 @@ Expected results:
 
 ## Seeded logins
 
-| Username           | Password              | Roles                | Main permissions                                                                  |
-| ------------------ | --------------------- | -------------------- | --------------------------------------------------------------------------------- |
-| `agent`            | `LocalAgent123!`      | Agent                | Search payments. Request refunds up to $5,000.                                    |
-| `supervisor`       | `LocalSupervisor123!` | Supervisor           | Request any refund. Approve the Supervisor step. Reveal customer email.           |
-| `finance`          | `LocalFinance123!`    | Finance              | Approve the Finance step. Run reconciliation. Resolve exceptions. Export CSV.     |
-| `auditor`          | `LocalAuditor123!`    | Auditor              | Read refunds and audit events. Verify the audit chain. Export CSV.                |
-| `platform-admin`   | `LocalPlatform123!`   | Platform Admin       | Pause and resume refund execution. Read audit events.                             |
-| `agent-supervisor` | `LocalDualRole123!`   | Agent and Supervisor | Use this account to see the self-approval block and to approve a Supervisor step. |
+| Username           | Password                | Roles                | Main permissions                                                                  |
+| ------------------ | ----------------------- | -------------------- | --------------------------------------------------------------------------------- |
+| `agent`            | `LocalAgent123!`        | Agent                | Search payments. Request refunds up to $5,000.                                    |
+| `supervisor`       | `LocalSupervisor123!`   | Supervisor           | Request any refund. Approve the Supervisor step. Reveal customer email.           |
+| `finance`          | `LocalFinance123!`      | Finance              | Approve the Finance step. Run reconciliation. Resolve exceptions. Export CSV.     |
+| `auditor`          | `LocalAuditor123!`      | Auditor              | Read refunds and audit events. Verify the audit chain. Export CSV.                |
+| `platform-admin`   | `LocalPlatform123!`     | Platform Admin       | Pause and resume refund execution. Read audit events.                             |
+| `agent-supervisor` | `LocalDualRole123!`     | Agent and Supervisor | Use this account to see the self-approval block and to approve a Supervisor step. |
+| `flag-editor`      | `LocalFlagEditor123!`   | Flag Editor          | Change development and staging flags. Request production flag changes.            |
+| `flag-approver`    | `LocalFlagApprover123!` | Flag Approver        | Approve or reject production flag changes.                                        |
 
 These accounts are for local development only. Do not use these passwords in other systems.
 
@@ -273,6 +275,29 @@ The API and the worker do not export traces in this prototype. The Jaeger contai
 
 Other metrics: `outbox_depth`, `reconciliation_exceptions_open`, and `execution_paused`.
 
+## Feature-Flag Panel
+
+The Feature-Flag Panel is the second tool. It uses the Foundation for sign-in, access checks, CSRF, idempotency, approvals, audit events and logs. It adds no tool-specific copy of these controls.
+
+- Each flag has a state for `development`, `staging` and `production`. A state has an on or off value and a rollout percent from 0 to 100.
+- A `flag_editor` changes `development` and `staging` immediately. The audit log records the state before and after the change.
+- A production change creates a Foundation approval. A `flag_approver` who is not the requester must approve it. The approval applies the change in the same database transaction.
+- If the approval expires, the change request expires. The editor can then request a new production change.
+- `auditor` and `platform_admin` can read flags, approvals and history. They cannot change flags.
+
+Demo steps:
+
+1. Sign in as `flag-editor`. Open Feature flags.
+2. Search for `dark`. Open `dashboard.dark_mode`.
+3. Set the staging rollout percent to 25. Select Save staging. The history shows the change.
+4. In Production, select Enabled in production. Set the rollout percent. Write a reason with at least 10 characters. Select Request production change. Production does not change yet.
+5. Sign out. Sign in as `flag-approver`. Open Flag approvals.
+6. Find the request. Select Approve. The page shows the new production state.
+7. Open the flag. The production state and the history show the approved change.
+8. Sign in as `auditor`. Open the flag. The controls are disabled.
+
+Code and controls are in `tools/feature-flags`. The runbook is in `tools/feature-flags/runbooks/README.md`.
+
 ## Add a tool
 
 ```sh
@@ -341,6 +366,7 @@ These commands use `postgres://tools:local-development-only@localhost:5432/inter
 | `apps/web`                                          | React console shell and the web tool registry                                                       |
 | `services/payment-simulator`                        | Local payment provider with signed webhooks and fault injection                                     |
 | `tools/refunds`                                     | Refunds Console: registry, API routes, worker handlers, web pages, and tests                        |
+| `tools/feature-flags`                               | Feature-Flag Panel: registry, migrations, seed, API routes, web pages, runbook, and tests           |
 | `scripts/new-tool.ts`, `scripts/check-new-tool.sh`  | Tool generator and its check                                                                        |
 | `e2e`                                               | Playwright configuration and specs                                                                  |
 | `infra/keycloak`                                    | Local Keycloak realm with users and groups                                                          |
@@ -354,27 +380,27 @@ These commands use `postgres://tools:local-development-only@localhost:5432/inter
 
 ## Status of each capability
 
-| Capability                                                              | Built | Simulated                                                | Documented                                                                         | Client-owned                                                                   |
-| ----------------------------------------------------------------------- | ----- | -------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Foundation runtime: permissions, CSRF, validation, idempotency, outbox  | Yes   |                                                          |                                                                                    |                                                                                |
-| Generic approvals with self-approval and duplicate-approval blocks      | Yes   |                                                          |                                                                                    |                                                                                |
-| Audit hash chain, append-only trigger, and least-privilege runtime role | Yes   |                                                          |                                                                                    |                                                                                |
-| Refund requests, tiers, balance reservation, daily auto limit           | Yes   |                                                          |                                                                                    |                                                                                |
-| Kill switch (pause and resume execution)                                | Yes   |                                                          |                                                                                    |                                                                                |
-| Reconciliation and exception queue                                      | Yes   |                                                          |                                                                                    |                                                                                |
-| Masked customer email with audited reveal                               | Yes   |                                                          |                                                                                    |                                                                                |
-| CSV exports                                                             | Yes   |                                                          |                                                                                    |                                                                                |
-| Tool generator and playbook                                             | Yes   |                                                          |                                                                                    |                                                                                |
-| Prometheus metrics endpoint                                             | Yes   |                                                          |                                                                                    |                                                                                |
-| Payment provider                                                        |       | Yes: local simulator. Optional Stripe test-mode adapter. | `docs/runbooks/stripe-test-mode.md`                                                | Production provider account and keys                                           |
-| Identity provider                                                       |       | Yes: local Keycloak                                      | `docs/adr/0006-keycloak-local-identity.md`                                         | Production IdP (for example Entra ID), groups, and joiner-mover-leaver process |
-| Customer and payment data                                               |       | Yes: synthetic seed data                                 |                                                                                    | Real data, data migration, and retention rules                                 |
-| Distributed tracing                                                     |       |                                                          | Jaeger container only. No trace export.                                            | OpenTelemetry instrumentation and the trace back end                           |
-| Azure deployment                                                        |       |                                                          | `infra/terraform` and `docs/adr/0007-azure-deployment.md`. Validated, not applied. | Subscription, state backend, apply pipeline, and approvals                     |
-| Secrets management                                                      |       |                                                          | Key Vault in Terraform                                                             | Secret values, rotation, and access reviews                                    |
-| Backups and disaster recovery                                           |       |                                                          | PostgreSQL settings in Terraform                                                   | Recovery tests and recovery targets                                            |
-| Runbooks and threat model                                               |       |                                                          | `docs/runbooks`, `docs/threat-model.md`                                            | Review, on-call ownership, and sign-off                                        |
-| Feature-Flag Panel                                                      |       |                                                          | Keycloak groups `flag-editor` and `flag-approver` only                             | Not in this scope                                                              |
+| Capability                                                               | Built | Simulated                                                | Documented                                                                         | Client-owned                                                                   |
+| ------------------------------------------------------------------------ | ----- | -------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Foundation runtime: permissions, CSRF, validation, idempotency, outbox   | Yes   |                                                          |                                                                                    |                                                                                |
+| Generic approvals with self-approval and duplicate-approval blocks       | Yes   |                                                          |                                                                                    |                                                                                |
+| Audit hash chain, append-only trigger, and least-privilege runtime role  | Yes   |                                                          |                                                                                    |                                                                                |
+| Refund requests, tiers, balance reservation, daily auto limit            | Yes   |                                                          |                                                                                    |                                                                                |
+| Kill switch (pause and resume execution)                                 | Yes   |                                                          |                                                                                    |                                                                                |
+| Reconciliation and exception queue                                       | Yes   |                                                          |                                                                                    |                                                                                |
+| Masked customer email with audited reveal                                | Yes   |                                                          |                                                                                    |                                                                                |
+| CSV exports                                                              | Yes   |                                                          |                                                                                    |                                                                                |
+| Tool generator and playbook                                              | Yes   |                                                          |                                                                                    |                                                                                |
+| Prometheus metrics endpoint                                              | Yes   |                                                          |                                                                                    |                                                                                |
+| Payment provider                                                         |       | Yes: local simulator. Optional Stripe test-mode adapter. | `docs/runbooks/stripe-test-mode.md`                                                | Production provider account and keys                                           |
+| Identity provider                                                        |       | Yes: local Keycloak                                      | `docs/adr/0006-keycloak-local-identity.md`                                         | Production IdP (for example Entra ID), groups, and joiner-mover-leaver process |
+| Customer and payment data                                                |       | Yes: synthetic seed data                                 |                                                                                    | Real data, data migration, and retention rules                                 |
+| Distributed tracing                                                      |       |                                                          | Jaeger container only. No trace export.                                            | OpenTelemetry instrumentation and the trace back end                           |
+| Azure deployment                                                         |       |                                                          | `infra/terraform` and `docs/adr/0007-azure-deployment.md`. Validated, not applied. | Subscription, state backend, apply pipeline, and approvals                     |
+| Secrets management                                                       |       |                                                          | Key Vault in Terraform                                                             | Secret values, rotation, and access reviews                                    |
+| Backups and disaster recovery                                            |       |                                                          | PostgreSQL settings in Terraform                                                   | Recovery tests and recovery targets                                            |
+| Runbooks and threat model                                                |       |                                                          | `docs/runbooks`, `docs/threat-model.md`                                            | Review, on-call ownership, and sign-off                                        |
+| Feature-Flag Panel: flags per environment, production approvals, history | Yes   |                                                          | `tools/feature-flags/runbooks/README.md`                                           |                                                                                |
 
 ## Terraform reference
 
