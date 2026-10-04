@@ -36,8 +36,15 @@ const ChargeQuery = z.object({
     .string()
     .regex(/^\d{1,13}$/)
     .optional(),
-  cursor: z.string().optional(),
+  sort: z
+    .enum(['date_desc', 'date_asc', 'amount_desc', 'amount_asc'])
+    .default('date_desc'),
+  cursor: z.string().max(128).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(25),
+});
+
+const RevealInput = z.object({
+  reason: z.string().trim().min(10).max(500),
 });
 
 const RefundInput = z.object({
@@ -105,8 +112,11 @@ const routes = [
     permission: 'charge.search',
     query: ChargeQuery,
     handler: async ({ tx, query, mask }) => {
-      const { q, from, to, minMinor, maxMinor, limit, cursor } =
+      const { q, from, to, minMinor, maxMinor, sort, limit, cursor } =
         query as z.infer<typeof ChargeQuery>;
+      const byAmount = sort.startsWith('amount');
+      const direction = sort.endsWith('asc') ? 'ASC' : 'DESC';
+      const sortColumn = byAmount ? 'amount_minor::bigint' : 'created_at';
       const values: unknown[] = [];
       const filters: string[] = [];
       if (q) {
@@ -134,13 +144,16 @@ const routes = [
         filters.push(`amount_minor <= $${values.length}::bigint`);
       }
       if (cursor) {
-        const [createdAt, id] = cursor.split('~');
-        if (!createdAt || !id || Number.isNaN(Date.parse(createdAt))) {
+        const [key, id] = cursor.split('~');
+        const validKey = byAmount
+          ? /^\d{1,19}$/.test(key ?? '')
+          : !Number.isNaN(Date.parse(key ?? ''));
+        if (!key || !id || !validKey) {
           fail('The search page token is not valid.', 400);
         }
-        values.push(createdAt, id);
+        values.push(key, id);
         filters.push(
-          `(created_at,id) < ($${values.length - 1}::timestamptz,$${values.length})`,
+          `(${sortColumn},id) ${direction === 'ASC' ? '>' : '<'} ($${values.length - 1}::${byAmount ? 'bigint' : 'timestamptz'},$${values.length})`,
         );
       }
       values.push(limit + 1);
@@ -149,7 +162,7 @@ const routes = [
                 currency,refunded_minor::text,created_at,
                 to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_at
          FROM refunds.charges ${filters.length ? `WHERE ${filters.join(' AND ')}` : ''}
-         ORDER BY created_at DESC,id DESC LIMIT $${values.length}`,
+         ORDER BY ${sortColumn} ${direction},id ${direction} LIMIT $${values.length}`,
         values,
       );
       const hasMore = result.rows.length > limit;
@@ -161,7 +174,10 @@ const routes = [
       const last = rows.at(-1);
       return {
         items: charges,
-        nextCursor: hasMore && last ? `${last.cursor_at}~${last.id}` : null,
+        nextCursor:
+          hasMore && last
+            ? `${byAmount ? last.amount_minor : last.cursor_at}~${last.id}`
+            : null,
       };
     },
   }),
@@ -170,8 +186,10 @@ const routes = [
     path: '/api/charges/:id/reveal-email',
     permission: 'customer.reveal',
     params: IdParams,
-    handler: async ({ tx, params, audit }) => {
+    body: RevealInput,
+    handler: async ({ tx, params, body, audit }) => {
       const { id } = params as z.infer<typeof IdParams>;
+      const { reason } = body as z.infer<typeof RevealInput>;
       const result = await tx.query(
         'SELECT customer_email FROM refunds.charges WHERE id=$1',
         [id],
@@ -182,7 +200,7 @@ const routes = [
         action: 'customer.email_revealed',
         objectType: 'charge',
         objectId: id,
-        after: { fields: ['customer_email'] },
+        after: { fields: ['customer_email'], reason },
       });
       return { customerEmail: result.rows[0].customer_email };
     },
@@ -413,8 +431,10 @@ const routes = [
         return { statusCode: 404, body: { error: 'Refund not found.' } };
       const audit = await tx.query(
         `SELECT event_data FROM foundation.audit_events
-         WHERE object_type='refund' AND object_id=$1 ORDER BY seq`,
-        [id],
+         WHERE (object_type='refund' AND object_id=$1)
+            OR (object_type='approval_request' AND object_id=$2::text)
+         ORDER BY seq`,
+        [id, result.rows[0].approval_request_id ?? null],
       );
       return {
         ...result.rows[0],

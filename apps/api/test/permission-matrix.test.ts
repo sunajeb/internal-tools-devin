@@ -66,6 +66,7 @@ const cases: MatrixCase[] = [
     request: (f) => ({
       method: 'POST',
       url: `/api/charges/${f.chargeId}/reveal-email`,
+      body: { reason: 'Permission matrix reveal test.' },
     }),
   },
   {
