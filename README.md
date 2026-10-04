@@ -133,12 +133,7 @@ These accounts are for local development only. Do not use these passwords in oth
 
 ### Change the user
 
-**Sign out** ends the console session only. Keycloak keeps its own sign-in session. If you click **Continue with company SSO** again, Keycloak signs you in as the same user. It does not show the login form.
-
-To sign in as a different user, do one of these steps:
-
-- After you click **Sign out**, open http://localhost:8080/realms/internal-tools/protocol/openid-connect/logout and click **Logout**. Then go back to http://localhost:5173.
-- Use a different browser profile or a private window for each user.
+**Sign out** ends the console session and the Keycloak session. Then click **Continue with company SSO** and sign in as a different user.
 
 ## Refund approval rules
 
@@ -452,7 +447,6 @@ Do not run `terraform plan` or `terraform apply` from this prototype. Read `infr
 | Symptom                                                                           | Cause                                                              | Action                                                                                                                                           |
 | --------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `docker compose up` fails with `port is already allocated`                        | Another process uses a port from the [port list](#urls-and-ports). | Stop that process, or change the host port in `docker-compose.yml`.                                                                              |
-| After **Sign out**, the next sign-in uses the same user and shows no login form   | Keycloak keeps its own session.                                    | Use the [change the user](#change-the-user) steps.                                                                                               |
 | The sign-in page shows `Sign-in service is not ready. Try again shortly.`         | Keycloak is still starting.                                        | Wait 30 seconds. Run `docker compose ps` and make sure that `keycloak` is `healthy`. Try again.                                                  |
 | The sign-in page shows `Sign-in expired. Start again.`                            | The sign-in took more than 5 minutes, or the API restarted.        | Go to http://localhost:5173 and sign in again.                                                                                                   |
 | `npm run db:migrate` fails with `password authentication failed for user "tools"` | The database password is not the local default.                    | Set `MIGRATION_DATABASE_URL=postgres://tools:<password>@localhost:5432/internal_tools`.                                                          |

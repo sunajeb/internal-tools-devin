@@ -75,8 +75,18 @@ function Shell({ session }: { session: Session }) {
       tool.navigation.some((item) => item.to === active.to),
     ) ?? webToolRegistry[0]!;
   const logout = useMutation({
-    mutationFn: () => api('/api/logout', { method: 'POST', body: '{}' }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['session'] }),
+    mutationFn: () =>
+      api<{ logoutUrl?: string }>('/api/logout', {
+        method: 'POST',
+        body: '{}',
+      }),
+    onSuccess: (result) => {
+      if (result.logoutUrl) {
+        window.location.assign(result.logoutUrl);
+        return;
+      }
+      void queryClient.invalidateQueries({ queryKey: ['session'] });
+    },
   });
   return (
     <div className="app-frame">
