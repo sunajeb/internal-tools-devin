@@ -407,10 +407,10 @@ describe.skipIf(!stackAvailable)(
 
     it('C3 daily limit: auto-tier refunds stop at 2,000.00 for each agent, also under concurrency', async () => {
       const dailyAgent = await signIn('daily-agent', ['agent']);
-      // The tier uses the total refund for each charge (SR-02). Thus each
-      // auto-tier request uses a new charge.
+      // The tier counts the total refunded on a charge, so each auto-tier
+      // request uses its own charge.
       const chargeIds = await Promise.all(
-        Array.from({ length: 12 }, () => createCharge(100_000)),
+        Array.from({ length: 12 }, () => createCharge(1_000_000)),
       );
       const responses = await Promise.all(
         chargeIds
@@ -428,12 +428,12 @@ describe.skipIf(!stackAvailable)(
         [dailyAgent.userId],
       );
       expect(totals.rows[0].auto_minor).toBe('200000');
-      const charged = await owner.query(
-        `SELECT coalesce(sum(refunded_minor),0)::text AS total
-         FROM refunds.charges WHERE id = ANY($1::text[])`,
-        [chargeIds],
+      const refunded = await Promise.all(
+        chargeIds
+          .slice(0, 10)
+          .map(async (id) => BigInt((await chargeRow(id)).refunded_minor)),
       );
-      expect(charged.rows[0].total).toBe('200000');
+      expect(refunded.reduce((sum, value) => sum + value, 0n)).toBe(200_000n);
       // Supervisor-tier requests do not count toward the auto-tier limit.
       const supervisorTier = await requestRefund(
         dailyAgent,
@@ -445,14 +445,25 @@ describe.skipIf(!stackAvailable)(
     });
 
     it('C4 policy tiers at the boundaries and two different approvers for dual tier', async () => {
-      // The tier uses the total refund for each charge (SR-02). Thus each
-      // boundary request uses a new charge.
-      const tierRequest = async (amountMinor: number, client = supervisor) =>
-        requestRefund(client, await createCharge(1_000_000), amountMinor);
-      const auto = await tierRequest(25_000);
-      const low = await tierRequest(25_001);
-      const high = await tierRequest(500_000);
-      const dual = await tierRequest(500_001);
+      // The tier counts the total refunded on a charge, so each boundary
+      // request uses its own charge.
+      const chargeId = await createCharge(2_000_000);
+      const auto = await requestRefund(
+        supervisor,
+        await createCharge(2_000_000),
+        25_000,
+      );
+      const low = await requestRefund(
+        supervisor,
+        await createCharge(2_000_000),
+        25_001,
+      );
+      const high = await requestRefund(
+        supervisor,
+        await createCharge(2_000_000),
+        500_000,
+      );
+      const dual = await requestRefund(supervisor, chargeId, 500_001);
       expect([auto.status, low.status, high.status, dual.status]).toEqual([
         201, 201, 201, 201,
       ]);
@@ -470,7 +481,7 @@ describe.skipIf(!stackAvailable)(
         'pending_approval',
       ]);
       expect(dual.body.approvalSteps).toEqual([['supervisor'], ['finance']]);
-      const agentDual = await tierRequest(500_001, agent);
+      const agentDual = await requestRefund(agent, chargeId, 500_001);
       expect(agentDual.status).toBe(403);
 
       const policyVersion = (

@@ -30,9 +30,9 @@ npm test
 
 | ID    | Severity | Area                                           | Location                                | Status                                |
 | ----- | -------- | ---------------------------------------------- | --------------------------------------- | ------------------------------------- |
-| SR-01 | High     | Unauthenticated request stops the API          | `apps/api/src/server.ts`                | Open (locked file, patch below)       |
-| SR-02 | High     | Split refunds avoid dual approval              | `tools/refunds/src/api.ts`              | Fixed in this PR, test added          |
-| SR-03 | Medium   | Body `decision` overrides the approval route   | Foundation `runtime.ts`                 | Open (patch below)                    |
+| SR-01 | High     | Unauthenticated request stops the API          | `apps/api/src/server.ts`                | Fixed on base (`9b326b1`)             |
+| SR-02 | High     | Split refunds avoid dual approval              | `tools/refunds/src/api.ts`              | Fixed on base (PR #5), test added     |
+| SR-03 | Medium   | Body `decision` overrides the approval route   | Foundation `runtime.ts`                 | Fixed on base (`9b326b1`)             |
 | SR-04 | Medium   | Expired approval can still be approved         | Foundation `runtime.ts`                 | Fixed on base (`a2ee631`), test added |
 | SR-05 | Medium   | Client sets request ID; IDs repeat             | `server.ts`, `tools/refunds/src/api.ts` | Open (patch below)                    |
 | SR-06 | Medium   | Login CSRF in OIDC callback                    | `server.ts`                             | Open (patch below)                    |
