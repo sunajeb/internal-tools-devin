@@ -346,13 +346,26 @@ async function executeRefund(
   }
 }
 
-// Errors that repeat on each attempt: raised by a trigger (P0001), bad
-// data (class 22), or a constraint (class 23). Other errors can be transient.
-function isPermanentError(error: unknown) {
-  const code = (error as { code?: unknown } | null)?.code;
-  return (
-    typeof code === 'string' &&
-    (code === 'P0001' || code.startsWith('22') || code.startsWith('23'))
+const transientSqlStateClasses = ['08', '40', '53', '57', '58'];
+const transientNetworkCodes = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'EPIPE',
+  'ETIMEDOUT',
+  'EAI_AGAIN',
+]);
+
+function isTransientError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  const code = (error as { code?: unknown }).code;
+  if (typeof code === 'string') {
+    return (
+      transientNetworkCodes.has(code) ||
+      transientSqlStateClasses.some((prefix) => code.startsWith(prefix))
+    );
+  }
+  return /connection terminated|timeout exceeded|connection timeout/i.test(
+    error.message,
   );
 }
 
@@ -394,7 +407,7 @@ async function processWebhooks(pool: pg.Pool) {
         [event.provider, event.event_id],
       );
     } catch (error) {
-      if (!isPermanentError(error)) {
+      if (isTransientError(error)) {
         transientError ??= error;
         continue;
       }

@@ -1180,4 +1180,12 @@ describe('Refunds webhook processing after errors', () => {
     await run(undefined);
     expect(updates).toEqual(['error:evt-1', 'processed:evt-2']);
   });
+
+  it('records a conflicting provider reference as a permanent error', async () => {
+    const { run, updates } = webhookRun(
+      new Error('Provider refund reference changed for an existing refund.'),
+    );
+    await run(undefined);
+    expect(updates).toEqual(['error:evt-1', 'processed:evt-2']);
+  });
 });
