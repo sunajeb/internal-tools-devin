@@ -1,0 +1,17 @@
+project                     = "itf"
+environment                 = "staging"
+location                    = "westeurope"
+unique_suffix               = "abc123"
+subscription_id             = "00000000-0000-0000-0000-000000000000"
+tenant_id                   = "00000000-0000-0000-0000-000000000001"
+owner                       = "platform-team"
+data_class                  = "confidential"
+cost_center                 = "engineering"
+entra_admin_object_id       = "00000000-0000-0000-0000-000000000002"
+entra_admin_principal_name  = "platform-admins"
+alert_email                 = "platform@example.com"
+alert_short_name            = "itf-stage"
+image                       = "internal-tools:latest"
+worker_command              = "node dist/worker.js"
+websites_port               = 3000
+postgres_storage_mb         = 32768

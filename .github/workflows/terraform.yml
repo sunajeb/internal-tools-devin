@@ -1,0 +1,94 @@
+name: Terraform
+
+on:
+  pull_request:
+    paths:
+      - "infra/terraform/**"
+      - ".github/workflows/terraform.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "infra/terraform/**"
+      - ".github/workflows/terraform.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: infra/terraform
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: 1.16.5
+      - name: Check formatting
+        run: terraform fmt -check -recursive
+
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [dev, staging, prod]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: 1.16.5
+      - name: Initialize without a backend
+        run: terraform -chdir="envs/${{ matrix.environment }}" init -backend=false -input=false
+      - name: Validate configuration
+        run: terraform -chdir="envs/${{ matrix.environment }}" validate
+
+  tflint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Install TFLint
+        uses: terraform-linters/setup-tflint@90f302c255ef959cbfb4bd10581afecdb7ece3e6 # v4.1.1
+        with:
+          tflint_version: 0.64.0
+      - name: Initialize TFLint plugins
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: tflint --init
+      - name: Lint configuration
+        run: tflint --recursive --config "$GITHUB_WORKSPACE/infra/terraform/.tflint.hcl"
+
+  iac-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Install and verify Trivy
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=0.75.0
+          archive="trivy_${version}_Linux-64bit.tar.gz"
+          base="https://github.com/aquasecurity/trivy/releases/download/v${version}"
+          curl --fail --location --silent --show-error "$base/$archive" --output "$RUNNER_TEMP/$archive"
+          curl --fail --location --silent --show-error "$base/trivy_${version}_checksums.txt" --output "$RUNNER_TEMP/checksums.txt"
+          cd "$RUNNER_TEMP"
+          grep "  ${archive}$" checksums.txt | sha256sum --check --strict
+          mkdir trivy-extract
+          tar -xzf "$archive" -C trivy-extract trivy
+          install -D trivy-extract/trivy "$RUNNER_TEMP/bin/trivy"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Scan Terraform configuration
+        run: trivy config --severity HIGH,CRITICAL --exit-code 1 .
