@@ -21,7 +21,13 @@ import {
   UserCheck,
   X,
 } from 'lucide-react';
-import { api, dateTime } from '@internal-tools/ui-kit';
+import {
+  api,
+  dateTime,
+  Dialog,
+  ErrorState,
+  LoadingState,
+} from '@internal-tools/ui-kit';
 
 type User = { id: string; displayName: string; roles: string[] };
 type CaseStatus = 'new' | 'in_review' | 'escalated' | 'approved' | 'rejected';
@@ -416,18 +422,17 @@ function CaseView({ user }: { user: User }) {
   if (isLoading) {
     return (
       <div className="page">
-        <div className="loading">
-          <span className="loader" /> Loading case
-        </div>
+        <LoadingState label="Loading case" />
       </div>
     );
   }
   if (error || !data) {
     return (
       <div className="page">
-        <p className="form-error" role="alert">
-          {error?.message ?? 'Case not found.'}
-        </p>
+        <ErrorState
+          title="The case is not available"
+          error={error ?? new Error('Case not found.')}
+        />
         <Link className="text-link" to="/tools/kyc">
           Back to the queue
         </Link>
@@ -566,25 +571,24 @@ function CaseView({ user }: { user: User }) {
             <p>The Foundation audit log records each step.</p>
           </div>
         </div>
-        <div className="timeline-list" role="list">
-          {data.timeline.map((event) => (
-            <div className="timeline-event" role="listitem" key={event.seq}>
-              <span className="timeline-dot" />
-              <div>
-                <b>{event.action.replace('kyc.', '').replaceAll('_', ' ')}</b>
-                <small>
-                  {event.actor_id} · {dateTime(event.occurred_at)} ·{' '}
-                  {event.result}
-                </small>
+        {data.timeline.length ? (
+          <div className="timeline-list" role="list">
+            {data.timeline.map((event) => (
+              <div className="timeline-event" role="listitem" key={event.seq}>
+                <span className="timeline-dot" />
+                <div>
+                  <b>{event.action.replace('kyc.', '').replaceAll('_', ' ')}</b>
+                  <small>
+                    {event.actor_id} · {dateTime(event.occurred_at)} ·{' '}
+                    {event.result}
+                  </small>
+                </div>
               </div>
-            </div>
-          ))}
-          {!data.timeline.length && (
-            <p className="empty-inline">
-              No events are recorded for this case.
-            </p>
-          )}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <p className="empty-inline">No events are recorded for this case.</p>
+        )}
       </section>
       {revealField && (
         <RevealDialog
@@ -639,7 +643,7 @@ function RevealDialog({
     reveal.mutate();
   };
   return (
-    <Modal onClose={onClose} labelledBy="kyc-reveal-title">
+    <Dialog onClose={onClose} labelledBy="kyc-reveal-title">
       <form onSubmit={submit}>
         <div className="modal-head">
           <div>
@@ -660,7 +664,7 @@ function RevealDialog({
         <label className="field-label">
           Reason for access
           <textarea
-            autoFocus
+            data-autofocus
             required
             minLength={10}
             maxLength={500}
@@ -689,7 +693,7 @@ function RevealDialog({
           </button>
         </div>
       </form>
-    </Modal>
+    </Dialog>
   );
 }
 
@@ -731,7 +735,7 @@ function ActionDialog({
   });
   const copy = actionText[action];
   return (
-    <Modal onClose={onClose} labelledBy="kyc-action-title">
+    <Dialog onClose={onClose} labelledBy="kyc-action-title">
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -755,7 +759,7 @@ function ActionDialog({
         <label className="field-label">
           {copy.field}
           <textarea
-            autoFocus
+            data-autofocus
             required={!optional}
             minLength={optional ? undefined : 10}
             maxLength={500}
@@ -784,7 +788,7 @@ function ActionDialog({
           </button>
         </div>
       </form>
-    </Modal>
+    </Dialog>
   );
 }
 
@@ -867,7 +871,7 @@ function Approvals({ user }: { user: User }) {
               </div>
               <div className="approval-actions">
                 {own && (
-                  <span className="muted">
+                  <span className="subline">
                     You cannot approve your own request.
                   </span>
                 )}
@@ -935,37 +939,6 @@ function StatusBadge({ status }: { status: string }) {
       <span />
       {statusLabels[status as CaseStatus] ?? status.replaceAll('_', ' ')}
     </span>
-  );
-}
-
-function Modal({
-  children,
-  onClose,
-  labelledBy,
-}: {
-  children: ReactNode;
-  onClose: () => void;
-  labelledBy: string;
-}) {
-  return (
-    <div
-      className="modal-backdrop"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <section
-        className="modal-card"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={labelledBy}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') onClose();
-        }}
-      >
-        {children}
-      </section>
-    </div>
   );
 }
 

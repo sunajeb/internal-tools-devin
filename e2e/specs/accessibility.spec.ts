@@ -17,6 +17,8 @@ const accounts = {
   finance: { username: 'finance', password: 'LocalFinance123!' },
   auditor: { username: 'auditor', password: 'LocalAuditor123!' },
   platformAdmin: { username: 'platform-admin', password: 'LocalPlatform123!' },
+  kycAnalyst: { username: 'kyc-analyst', password: 'LocalKycAnalyst123!' },
+  kycLead: { username: 'kyc-lead', password: 'LocalKycLead123!' },
 } satisfies Record<string, Account>;
 
 async function signIn(page: Page, account: Account) {
@@ -223,6 +225,50 @@ test.describe('accessibility', () => {
     await page.getByRole('button', { name: /verify chain/i }).click();
     await expect(page.getByText(/audit chain verified/i)).toBeVisible();
     await expectNoSeriousViolations(page, testInfo, 'auditor-audit');
+  });
+
+  test('KYC analyst: queue, case detail and reveal reason', async ({
+    page,
+  }, testInfo) => {
+    await signIn(page, accounts.kycAnalyst);
+    await openPage(page, 'KYC queue', /kyc review queue/i);
+    const table = page.getByRole('table', { name: 'KYC cases' });
+    await expect(table.getByRole('link').first()).toBeVisible();
+    await expectNoSeriousViolations(page, testInfo, 'kyc-analyst-queue');
+
+    await page.getByLabel('Status').selectOption('new');
+    await expect(table.getByRole('link').first()).toBeVisible();
+    await table.getByRole('link').first().click();
+    await expect(page.getByTestId('kyc-national_id')).toHaveText('[REDACTED]');
+    await page.waitForLoadState('networkidle');
+    await expectNoSeriousViolations(page, testInfo, 'kyc-analyst-case');
+
+    await page.getByRole('button', { name: 'Claim case' }).click();
+    await expect(page.getByText(/you claimed this case/i)).toBeVisible();
+    const opener = page.getByRole('button', { name: 'Reveal national id' });
+    await opener.click();
+    const reveal = page.getByRole('dialog', { name: /reveal national id/i });
+    await expect(reveal.getByLabel(/reason for access/i)).toBeFocused();
+    await expectNoSeriousViolations(page, testInfo, 'kyc-analyst-reveal');
+    await page.keyboard.press('Escape');
+    await expect(reveal).toHaveCount(0);
+    await expect(opener).toBeFocused();
+  });
+
+  test('KYC lead: approval inbox', async ({ page }, testInfo) => {
+    await signIn(page, accounts.kycLead);
+    await openPage(page, 'KYC approvals', /kyc approval inbox/i);
+    await expectNoSeriousViolations(page, testInfo, 'kyc-lead-approvals');
+  });
+
+  test('auditor: masked KYC case', async ({ page }, testInfo) => {
+    await signIn(page, accounts.auditor);
+    await openPage(page, 'KYC queue', /kyc review queue/i);
+    const table = page.getByRole('table', { name: 'KYC cases' });
+    await table.getByRole('link').first().click();
+    await expect(page.getByTestId('kyc-national_id')).toHaveText('[REDACTED]');
+    await page.waitForLoadState('networkidle');
+    await expectNoSeriousViolations(page, testInfo, 'auditor-kyc-case');
   });
 
   test('platform admin: overview', async ({ page }, testInfo) => {
