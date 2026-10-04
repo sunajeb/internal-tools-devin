@@ -6,6 +6,7 @@
     { "path": "./packages/ui-kit" },
     { "path": "./tools/refunds" },
     { "path": "./apps/api" },
+    { "path": "./apps/api/test" },
     { "path": "./apps/worker" },
     { "path": "./services/payment-simulator" },
     { "path": "./apps/web" }
