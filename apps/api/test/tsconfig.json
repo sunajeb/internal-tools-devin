@@ -1,0 +1,14 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "../dist/test",
+    "composite": true
+  },
+  "references": [
+    { "path": ".." },
+    { "path": "../../../packages/foundation" },
+    { "path": "../../../tools/refunds" }
+  ],
+  "include": ["**/*.ts"]
+}

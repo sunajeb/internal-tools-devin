@@ -360,7 +360,7 @@ function Overview({ user }: { user: User }) {
               <b>Approval policy active</b>
               <p>Thresholds are versioned and dual-controlled.</p>
               <span className="policy-version">
-                <span aria-hidden="true" /> POLICY V1 · ACTIVE
+                <span aria-hidden="true" /> POLICY V3 · ACTIVE
               </span>
             </div>
           </div>
@@ -948,10 +948,11 @@ function RefundDialog({
     amountError && (submitAttempted || amountText !== ''),
   );
   const showNoteError = Boolean(noteError && submitAttempted);
+  const cumulativeMinor = BigInt(charge.refunded_minor) + amountMinor;
   const tier =
-    amountMinor <= 25_000n
+    cumulativeMinor <= 25_000n
       ? 'Instant refund'
-      : amountMinor <= 500_000n
+      : cumulativeMinor <= 500_000n
         ? 'Supervisor approval'
         : 'Supervisor + Finance approval';
   const mutation = useMutation({
@@ -1090,7 +1091,7 @@ function RefundDialog({
                 : 'This request will appear in the eligible approver inbox.'}
             </small>
           </div>
-          <span className="tier-policy">POLICY V1</span>
+          <span className="tier-policy">POLICY V3</span>
         </div>
         {error && (
           <div className="form-error" role="alert">
@@ -1378,10 +1379,13 @@ function Approvals({ user }: { user: User }) {
       stepIndex: number;
       decision: string;
     }) =>
-      api(`/api/approvals/${id}/approve`, {
-        method: 'POST',
-        body: JSON.stringify({ stepIndex, decision }),
-      }),
+      api(
+        `/api/approvals/${id}/${decision === 'reject' ? 'reject' : 'approve'}`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ stepIndex, decision }),
+        },
+      ),
     onSuccess: (_result, { decision }) => {
       setMessage({
         tone: 'success',

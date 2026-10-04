@@ -534,7 +534,17 @@ export async function buildServer(options: BuildServerOptions = {}) {
 
   server.post(
     '/api/webhooks/simulator',
-    { config: { rawBody: true } },
+    {
+      config: { rawBody: true },
+      onRequest: async (request, reply) => {
+        const type = String(request.headers['content-type'] ?? '');
+        if (!type.startsWith('application/json')) {
+          return reply
+            .code(415)
+            .send({ error: 'Send the webhook as application/json.' });
+        }
+      },
+    },
     async (request, reply) => {
       const raw = (request as ApiRequest & { rawBody?: Buffer }).rawBody;
       if (!raw) {
