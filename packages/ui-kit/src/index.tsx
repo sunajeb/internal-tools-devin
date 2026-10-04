@@ -88,10 +88,6 @@ const focusableSelector = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
-/**
- * Modal dialog. Moves focus into the dialog, keeps Tab inside it, closes on
- * Escape or a backdrop click, and returns focus to the opener on close.
- */
 export function Dialog({
   children,
   onClose,

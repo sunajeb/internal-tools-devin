@@ -130,7 +130,7 @@ function canOpenPage(user: User, path: string) {
   return !item || item.roles.some((role) => user.roles.includes(role));
 }
 
-export function RefundsPages({ user }: { user: User }) {
+function RefundsPages({ user }: { user: User }) {
   return (
     <Routes>
       <Route
@@ -2183,7 +2183,7 @@ function EmptyState({
   );
 }
 
-export const refundsWebTool = {
+export const tool = {
   id: 'refunds',
   name: 'Refunds Console',
   description: 'Payments operations',
@@ -2192,6 +2192,3 @@ export const refundsWebTool = {
   navigation: refundsNavigation,
   Pages: RefundsPages,
 };
-
-export const tool = refundsWebTool;
-export default RefundsPages;

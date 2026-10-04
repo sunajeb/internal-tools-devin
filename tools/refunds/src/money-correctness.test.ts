@@ -5,8 +5,6 @@ import { refundsTool } from './registry.js';
 import { createPaymentProvider, type PaymentProvider } from './provider.js';
 import { createRefundWorkerRegistration } from './worker.js';
 
-// Integration tests against the docker compose stack (API, worker, Postgres,
-// payment simulator). They skip when the stack is not reachable.
 const apiUrl = process.env.INTEGRATION_API_URL ?? 'http://localhost:3000';
 const simulatorUrl =
   process.env.INTEGRATION_SIMULATOR_URL ?? 'http://localhost:4000';
@@ -112,7 +110,7 @@ async function signIn(name: string, roles: string[]): Promise<ApiClient> {
       try {
         parsed = JSON.parse(text);
       } catch {
-        // Keep the raw text for non-JSON responses.
+        parsed = text;
       }
       return { status: response.status, body: parsed };
     },
@@ -381,7 +379,6 @@ describe.skipIf(!stackAvailable)(
       );
       expect(active.rows[0].total).toBe('900000');
 
-      // The CHECK constraint holds even when an owner disables triggers.
       const client = await owner.connect();
       try {
         await client.query('BEGIN');
@@ -406,8 +403,6 @@ describe.skipIf(!stackAvailable)(
 
     it('C3 daily limit: auto-tier refunds stop at 2,000.00 for each agent, also under concurrency', async () => {
       const dailyAgent = await signIn('daily-agent', ['agent']);
-      // The tier counts the total refunded on a charge, so each auto-tier
-      // request uses its own charge.
       const chargeIds = await Promise.all(
         Array.from({ length: 12 }, () => createCharge(1_000_000)),
       );
@@ -433,7 +428,6 @@ describe.skipIf(!stackAvailable)(
           .map(async (id) => BigInt((await chargeRow(id)).refunded_minor)),
       );
       expect(refunded.reduce((sum, value) => sum + value, 0n)).toBe(200_000n);
-      // Supervisor-tier requests do not count toward the auto-tier limit.
       const supervisorTier = await requestRefund(
         dailyAgent,
         chargeIds[11]!,
@@ -444,8 +438,6 @@ describe.skipIf(!stackAvailable)(
     });
 
     it('C4 policy tiers at the boundaries and two different approvers for dual tier', async () => {
-      // The tier counts the total refunded on a charge, so each boundary
-      // request uses its own charge.
       const chargeId = await createCharge(2_000_000);
       const auto = await requestRefund(
         supervisor,
@@ -498,7 +490,6 @@ describe.skipIf(!stackAvailable)(
       expect(approval.rows[0].hours).toBe(72);
       const approvalId = approval.rows[0].id as string;
 
-      // Requester cannot approve. Finance cannot go first.
       expect(
         (
           await supervisor.call(
@@ -519,7 +510,6 @@ describe.skipIf(!stackAvailable)(
           })
         ).status,
       ).toBe(409);
-      // One user with both roles can approve only one step.
       const firstStep = await supervisorFinance.call(
         'POST',
         `/api/approvals/${approvalId}/approve`,
@@ -576,7 +566,6 @@ describe.skipIf(!stackAvailable)(
     });
 
     it('C5 provider timeout then retry creates exactly one provider refund', async () => {
-      // a) Injected transient timeout (HTTP 503) before the provider records the refund.
       await simulatorAdmin('/admin/faults', { fault: 'timeout-then-succeed' });
       const chargeId = await createCharge(100_000);
       const created = await requestRefund(agent, chargeId, 10_000);
@@ -594,7 +583,6 @@ describe.skipIf(!stackAvailable)(
       expect(await auditCount(refundId, 'refund.execution_started')).toBe(1);
       expect(await auditCount(refundId, 'refund.execution_completed')).toBe(1);
 
-      // b) The provider records the refund but the response is lost (client timeout).
       await setPaused(true);
       try {
         const lostCharge = await createCharge(100_000);
@@ -888,8 +876,6 @@ describe.skipIf(!stackAvailable)(
           [seq],
         );
         await client.query('SAVEPOINT before_verify');
-        // The verify endpoint reads committed data, so check the deletion with
-        // the shared verifier on this transaction's view.
         const { verifyAuditChain } = await import('@internal-tools/foundation');
         const rows = await client.query(
           'SELECT event_data,prev_hash,hash FROM foundation.audit_events ORDER BY seq',
@@ -913,7 +899,6 @@ describe.skipIf(!stackAvailable)(
         await client.query('ROLLBACK').catch(() => undefined);
         throw error;
       } finally {
-        // Restore the original event if a step failed after the tamper commit.
         await client.query('BEGIN');
         await client.query("SET LOCAL session_replication_role = 'replica'");
         await client.query(
@@ -1039,7 +1024,6 @@ describe.skipIf(!stackAvailable)(
       }
       expect(outcomes).toEqual([]);
 
-      // API: a rejected refund cannot be approved; the worker does not execute it.
       const apiCharge = await createCharge(100_000);
       const pending = await requestRefund(agent, apiCharge, 30_000);
       const approvalId = (await refundRow(pending.body.id))

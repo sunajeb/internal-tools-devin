@@ -1,4 +1,3 @@
-# Blob diagnostics use a separate setting; non-production requires ZRS; the client owns future CMK provisioning.
 #trivy:ignore:AZU-0058
 #trivy:ignore:AZU-0057
 #trivy:ignore:AZU-0060
@@ -18,7 +17,6 @@ resource "azurerm_storage_account" "main" {
   default_to_oauth_authentication   = true
 
   blob_properties {
-    # Container-level WORM is the documented scope for accounts without versioning. Version-level WORM requires versioning and is a different model.
     versioning_enabled = false
     delete_retention_policy {
       days = 30
@@ -55,7 +53,6 @@ resource "azurerm_storage_container_immutability_policy" "audit_anchors" {
   immutability_period_in_days           = var.retention_days
   protected_append_writes_enabled       = true
   locked                                = var.immutability_locked
-  # A locked policy cannot be shortened or removed. Locking is permanent. Set this value to true only in production.
 }
 
 resource "azurerm_private_endpoint" "main" {
