@@ -3,6 +3,7 @@ location                    = "westeurope"
 unique_suffix               = "abc123"
 subscription_id             = "00000000-0000-0000-0000-000000000000"
 tenant_id                   = "00000000-0000-0000-0000-000000000001"
+allowed_group_object_ids    = ["00000000-0000-0000-0000-000000000003"]
 owner                       = "platform-team"
 data_class                  = "confidential"
 cost_center                 = "engineering"

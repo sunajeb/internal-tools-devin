@@ -29,6 +29,10 @@ variable "app_integration_subnet_id" {
   type = string
 }
 
+variable "deployment_runner_subnet_id" {
+  type = string
+}
+
 variable "acr_id" {
   type = string
 }

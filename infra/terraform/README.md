@@ -29,19 +29,19 @@ flowchart TD
 
 ## Modules
 
-| Module         | Purpose                                                                            |
-| -------------- | ---------------------------------------------------------------------------------- |
-| `network`      | Virtual network, delegated subnets, security groups, and private DNS               |
-| `postgres`     | Private PostgreSQL Flexible Server, database, Entra administrator, and diagnostics |
-| `app_service`  | Web app, staging slot, Front Door ingress restriction, and ACR permissions         |
-| `worker`       | Private worker App Service with managed identity                                   |
-| `registry`     | Premium Azure Container Registry                                                   |
-| `key_vault`    | Private Key Vault, role assignments, and diagnostics                               |
-| `monitoring`   | Log Analytics, Application Insights, and action group                              |
-| `alerts`       | Web, database, and outbox metric alerts                                            |
-| `storage_worm` | Private immutable audit-anchor storage                                             |
-| `front_door`   | Front Door Premium, WAF, HTTPS route, and diagnostics                              |
-| `identity`     | Entra OIDC application and rotating client secret                                  |
+| Module         | Purpose                                                                                     |
+| -------------- | ------------------------------------------------------------------------------------------- |
+| `network`      | Virtual network, app, data, and deployment runner subnets, security groups, and private DNS |
+| `postgres`     | Private PostgreSQL Flexible Server, database, Entra administrator, and diagnostics          |
+| `app_service`  | Web app, staging slot, Front Door ingress restriction, and ACR permissions                  |
+| `worker`       | Private worker App Service with managed identity                                            |
+| `registry`     | Premium Azure Container Registry                                                            |
+| `key_vault`    | Private Key Vault, role assignments, and diagnostics                                        |
+| `monitoring`   | Log Analytics, Application Insights, and action group                                       |
+| `alerts`       | Web, database, and outbox metric alerts                                                     |
+| `storage_worm` | Private immutable audit-anchor storage                                                      |
+| `front_door`   | Front Door Premium, WAF, HTTPS route, and diagnostics                                       |
+| `identity`     | Entra OIDC application, allowed-group assignments, and rotating client secret               |
 
 Each environment defines its own backend key and resource settings. The `dev`, `staging`, and `prod` roots use separate state.
 
@@ -99,7 +99,8 @@ These checks do not create cloud resources. Never run `terraform plan` or `terra
 5. Configure a deployment pipeline with GitHub environment `prod` and required reviewers.
 6. Add an OIDC federated credential for the deployment pipeline. Do not store Azure credentials in GitHub secrets.
 7. Run apply only from the approved deployment pipeline after manual approval.
-8. Run the apply job from a self-hosted runner in the VNet. Key Vault and storage disable public access.
+8. Run the apply job from a self-hosted runner in the deployment runner subnet. Key Vault and storage disable public access.
+   Requests from the runner subnet reach the staging slot directly. They do not go through the Front Door WAF or rate limit. Put only the approved apply runner in this subnet.
 
 The client owns state storage, access control, recovery, and retention. This repository does not provision or apply the backend.
 
@@ -109,20 +110,22 @@ The client owns state storage, access control, recovery, and retention. This rep
 2. Connect to PostgreSQL with an Entra administrator. Create web app, staging slot, and worker principals with `pgaadauth_create_principal`.
 3. Run `npm run db:migrate` from a runner in the virtual network. Set `PGHOST`, `PGDATABASE`, and `PGUSER` to an Entra principal that can change the schema. The script uses the same Entra token flow as the app. Then grant the app principals access to the tables.
 4. Push the first application image to ACR from an authorized GitHub-hosted runner.
-5. Deploy each release to the staging slot. Warm `/health/ready` and check logs before swapping slots.
+5. Deploy each release to the staging slot. Run `/health/ready` from the deployment runner and check the logs before you swap slots.
 6. Confirm the production slot serves traffic. Keep the previous slot available for rollback.
 
-The app must emit `outbox_failed_total` for its query alert to detect failed outbox work.
+The app must emit `outbox_failed_total` as an OpenTelemetry counter through the Azure Monitor exporter. The exporter sends the increment for each interval (delta temporality). The alert adds the values in a 10-minute window and fires when the total is more than 0.
 
 ## Client-owned controls
 
 - Provide the Azure subscription, landing zone, network ranges, and resource policies.
 - Bootstrap the state storage account and define its access and recovery policies.
 - Grant tenant admin consent for the Microsoft Graph permissions.
+- Own the Entra security groups that may sign in.
 - Own DNS, the custom domain, and TLS certificates when configured.
 - Maintain action group recipients and on-call coverage.
 - Review service cost and capacity. Run PostgreSQL backup restore drills.
-- Own secret rotation operations and review the Terraform state exposure risk.
+- Run an approved apply at least monthly to rotate the OIDC password on time.
+- The password expires 180 days after its rotation due time. Restrict Terraform state access.
 
 ## Security controls
 

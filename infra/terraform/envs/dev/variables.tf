@@ -24,6 +24,10 @@ variable "tenant_id" {
   type = string
 }
 
+variable "allowed_group_object_ids" {
+  type = list(string)
+}
+
 variable "owner" {
   type = string
 }

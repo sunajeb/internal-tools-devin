@@ -90,9 +90,13 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "outbox_failed" {
   description          = "Outbox delivery failures were reported."
   severity             = 2
   evaluation_frequency = "PT5M"
-  window_duration      = "PT5M"
+  window_duration      = "PT10M"
   criteria {
-    query                   = "customMetrics | where name == \"outbox_failed_total\" | summarize failed = max(value)"
+    query                   = <<-QUERY
+      customMetrics
+      | where name == "outbox_failed_total"
+      | summarize failed = sum(value)
+    QUERY
     time_aggregation_method = "Maximum"
     metric_measure_column   = "failed"
     operator                = "GreaterThan"

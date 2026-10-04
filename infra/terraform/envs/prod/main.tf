@@ -55,6 +55,7 @@ module "network" {
   worker_prefix            = "10.${local.env_octet}.2.0/26"
   private_endpoints_prefix = "10.${local.env_octet}.3.0/27"
   postgres_prefix          = "10.${local.env_octet}.4.0/27"
+  runner_prefix            = "10.${local.env_octet}.5.0/27"
   tags                     = local.tags
 }
 
@@ -99,6 +100,7 @@ module "app_service" {
   zone_balancing_enabled                 = local.settings.web_zone_balancing
   worker_count                           = local.settings.web_worker_count
   app_integration_subnet_id              = module.network.app_integration_subnet_id
+  deployment_runner_subnet_id            = module.network.runner_subnet_id
   acr_id                                 = module.registry.id
   acr_login_server                       = module.registry.login_server
   image                                  = var.image
@@ -190,9 +192,11 @@ module "identity" {
   source                           = "../../modules/identity"
   display_name                     = "${local.base_name}-oidc"
   tenant_id                        = var.tenant_id
+  allowed_group_object_ids         = var.allowed_group_object_ids
   redirect_uri                     = local.oidc_redirect_uri
   key_vault_id                     = module.key_vault.id
   secret_writer_role_assignment_id = module.key_vault.deployer_role_assignment_id
+  key_vault_network_dependency_ids = [module.key_vault.private_endpoint_id, module.network.key_vault_dns_zone_link_id]
   tags                             = local.tags
 }
 

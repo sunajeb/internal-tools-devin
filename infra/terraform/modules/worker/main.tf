@@ -11,6 +11,7 @@ resource "azurerm_service_plan" "main" {
 
 #trivy:ignore:AZU-0001
 #trivy:ignore:AZU-0003
+# tflint-ignore: azurerm_app_service_missing_auto_heal_setting # Health check eviction replaces unhealthy instances. A request-count trigger recycles healthy instances.
 resource "azurerm_linux_web_app" "main" {
   name                          = var.name
   resource_group_name           = var.resource_group_name
@@ -49,17 +50,6 @@ resource "azurerm_linux_web_app" "main" {
     ip_restriction_default_action           = "Deny"
     scm_ip_restriction_default_action       = "Deny"
     container_registry_use_managed_identity = true
-    auto_heal_setting {
-      trigger {
-        requests {
-          count    = 10
-          interval = "00:05:00"
-        }
-      }
-      action {
-        action_type = "Recycle"
-      }
-    }
     application_stack {
       docker_image_name   = var.image
       docker_registry_url = "https://${var.acr_login_server}"
