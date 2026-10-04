@@ -107,7 +107,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm audit --audit-level=high
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - run: pip install semgrep==1.178.0
