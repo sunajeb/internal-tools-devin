@@ -19,7 +19,7 @@ async function signIn(
 
 const screenshotDir = process.env.SCREENSHOT_DIR
   ? resolve(process.env.SCREENSHOT_DIR)
-  : '/home/ubuntu/briefs/screens';
+  : resolve('test-results/screens');
 
 test.beforeAll(async () => {
   await mkdir(screenshotDir, { recursive: true });

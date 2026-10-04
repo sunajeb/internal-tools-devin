@@ -7,7 +7,7 @@ const pool = new pg.Pool({
   connectionString:
     process.env.MIGRATION_DATABASE_URL ??
     process.env.DATABASE_URL ??
-    'postgres://tools:tools@localhost:5432/internal_tools',
+    'postgres://tools:local-development-only@localhost:5432/internal_tools',
 });
 
 await pool.query(`
@@ -45,12 +45,16 @@ await pool.query(`
 await pool.query(`
   WITH pending AS (
     INSERT INTO foundation.approval_requests(
-      tool_id,action,object_type,object_id,requester_id,tier,policy_version,content_hash,steps,status,expires_at
+      tool_id,action,object_type,object_id,requester_id,tier,policy_version,content_hash,steps,status,expires_at,summary
     )
     SELECT 'refunds','refund.execute','refund',r.id::text,r.requester_id,r.tier,r.policy_version,
            md5(r.id::text),jsonb_build_array(jsonb_build_object(
              'roles',jsonb_build_array('supervisor'),'approvals','[]'::jsonb
-           )),'pending',now()+interval '72 hours'
+           )),'pending',now()+interval '72 hours',
+           jsonb_build_object(
+             'refund_id',r.id::text,'charge_id',r.charge_id,'amount_minor',r.amount_minor::text,
+             'currency',r.currency,'reason_code',r.reason_code,'note',r.note,'status',r.status
+           )
     FROM refunds.refunds r
     WHERE r.requester_id='seed-agent' AND r.status='pending_approval' AND r.approval_request_id IS NULL
     RETURNING id,object_id

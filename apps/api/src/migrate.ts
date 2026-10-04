@@ -8,7 +8,7 @@ const pool = new pg.Pool({
   connectionString:
     process.env.MIGRATION_DATABASE_URL ??
     process.env.DATABASE_URL ??
-    'postgres://tools:tools@localhost:5432/internal_tools',
+    'postgres://tools:local-development-only@localhost:5432/internal_tools',
 });
 
 async function sqlFiles(directory: string): Promise<string[]> {
