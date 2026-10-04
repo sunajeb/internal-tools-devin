@@ -33,7 +33,7 @@ export const refundsTool = defineTool({
   },
   approvalRules: {
     'refund.execute': definePolicy({
-      version: 1,
+      version: 3,
       tiers: [
         {
           name: 'auto',

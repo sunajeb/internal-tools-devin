@@ -321,7 +321,7 @@ function Overview({ user }: { user: User }) {
               <b>Approval policy active</b>
               <p>Thresholds are versioned and dual-controlled.</p>
               <span className="policy-version">
-                <span /> POLICY V1 · ACTIVE
+                <span /> POLICY V3 · ACTIVE
               </span>
             </div>
           </div>
@@ -881,7 +881,7 @@ function RefundDialog({
                 : 'This request will appear in the eligible approver inbox.'}
             </small>
           </div>
-          <span className="tier-policy">POLICY V1</span>
+          <span className="tier-policy">POLICY V3</span>
         </div>
         {error && (
           <div className="form-error">
