@@ -29,19 +29,19 @@ flowchart TD
 
 ## Modules
 
-| Module | Purpose |
-| --- | --- |
-| `network` | Virtual network, delegated subnets, security groups, and private DNS |
-| `postgres` | Private PostgreSQL Flexible Server, database, Entra administrator, and diagnostics |
-| `app_service` | Web app, staging slot, Front Door ingress restriction, and ACR permissions |
-| `worker` | Private worker App Service with managed identity |
-| `registry` | Premium Azure Container Registry |
-| `key_vault` | Private Key Vault, role assignments, and diagnostics |
-| `monitoring` | Log Analytics, Application Insights, and action group |
-| `alerts` | Web, database, and outbox metric alerts |
-| `storage_worm` | Private immutable audit-anchor storage |
-| `front_door` | Front Door Premium, WAF, HTTPS route, and diagnostics |
-| `identity` | Entra OIDC application and rotating client secret |
+| Module         | Purpose                                                                            |
+| -------------- | ---------------------------------------------------------------------------------- |
+| `network`      | Virtual network, delegated subnets, security groups, and private DNS               |
+| `postgres`     | Private PostgreSQL Flexible Server, database, Entra administrator, and diagnostics |
+| `app_service`  | Web app, staging slot, Front Door ingress restriction, and ACR permissions         |
+| `worker`       | Private worker App Service with managed identity                                   |
+| `registry`     | Premium Azure Container Registry                                                   |
+| `key_vault`    | Private Key Vault, role assignments, and diagnostics                               |
+| `monitoring`   | Log Analytics, Application Insights, and action group                              |
+| `alerts`       | Web, database, and outbox metric alerts                                            |
+| `storage_worm` | Private immutable audit-anchor storage                                             |
+| `front_door`   | Front Door Premium, WAF, HTTPS route, and diagnostics                              |
+| `identity`     | Entra OIDC application and rotating client secret                                  |
 
 Each environment defines its own backend key and resource settings. The `dev`, `staging`, and `prod` roots use separate state.
 
@@ -105,29 +105,29 @@ The app must emit `outbox_failed_total` for its query alert to detect failed out
 
 ## Security controls
 
-| Control | Implementation | File |
-| --- | --- | --- |
-| Private database | Delegated subnet, disabled public access, and explicit NSG rules | `modules/postgres/main.tf`, `modules/network/main.tf` |
-| Point-in-time recovery | 35-day backup retention and geo-redundant backup | `modules/postgres/main.tf` |
-| High availability | Zone-redundant PostgreSQL only in production | `envs/prod/main.tf`, `modules/postgres/main.tf` |
-| WORM audit anchors | 30-day deletion recovery, immutable container, seven-year production retention | `modules/storage_worm/main.tf` |
-| Web application firewall | Front Door Premium managed rules and request rate limiting | `modules/front_door/main.tf` |
-| Secret storage | Private Key Vault, RBAC, and Key Vault references | `modules/key_vault/main.tf`, `modules/app_service/main.tf` |
-| Managed identities | ACR pull role assignments; no registry admin credentials | `modules/app_service/main.tf`, `modules/worker/main.tf`, `modules/registry/main.tf` |
-| Zero-downtime release | Staging slot and documented warm-up and swap process | `modules/app_service/main.tf` |
-| TLS 1.2 | Web and worker minimum TLS, storage minimum TLS, HTTPS ingress | `modules/app_service/main.tf`, `modules/worker/main.tf`, `modules/storage_worm/main.tf` |
-| Centralized logs and alerts | Diagnostic settings, Log Analytics, App Insights, and alerts | `modules/monitoring/main.tf`, `modules/alerts/main.tf` |
-| Entra SSO | OIDC app, group claims, and single-tenant audience | `modules/identity/main.tf` |
+| Control                     | Implementation                                                                 | File                                                                                    |
+| --------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| Private database            | Delegated subnet, disabled public access, and explicit NSG rules               | `modules/postgres/main.tf`, `modules/network/main.tf`                                   |
+| Point-in-time recovery      | 35-day backup retention and geo-redundant backup                               | `modules/postgres/main.tf`                                                              |
+| High availability           | Zone-redundant PostgreSQL only in production                                   | `envs/prod/main.tf`, `modules/postgres/main.tf`                                         |
+| WORM audit anchors          | 30-day deletion recovery, immutable container, seven-year production retention | `modules/storage_worm/main.tf`                                                          |
+| Web application firewall    | Front Door Premium managed rules and request rate limiting                     | `modules/front_door/main.tf`                                                            |
+| Secret storage              | Private Key Vault, RBAC, and Key Vault references                              | `modules/key_vault/main.tf`, `modules/app_service/main.tf`                              |
+| Managed identities          | ACR pull role assignments; no registry admin credentials                       | `modules/app_service/main.tf`, `modules/worker/main.tf`, `modules/registry/main.tf`     |
+| Zero-downtime release       | Staging slot and documented warm-up and swap process                           | `modules/app_service/main.tf`                                                           |
+| TLS 1.2                     | Web and worker minimum TLS, storage minimum TLS, HTTPS ingress                 | `modules/app_service/main.tf`, `modules/worker/main.tf`, `modules/storage_worm/main.tf` |
+| Centralized logs and alerts | Diagnostic settings, Log Analytics, App Insights, and alerts                   | `modules/monitoring/main.tf`, `modules/alerts/main.tf`                                  |
+| Entra SSO                   | OIDC app, group claims, and single-tenant audience                             | `modules/identity/main.tf`                                                              |
 
 ## Scanner exceptions
 
-| Finding | Reason | File |
-| --- | --- | --- |
-| `AZU-0001` | Front Door restricts web ingress. The worker is private and has no client-facing endpoint. | `modules/app_service/main.tf`, `modules/worker/main.tf` |
-| `AZU-0003` | The Node service owns OIDC. App Service authentication would duplicate it. The worker is not user-facing. | `modules/app_service/main.tf`, `modules/worker/main.tf` |
-| `AZU-0017` | The Key Vault secret expiry comes from the rotating Entra password. Trivy cannot evaluate that expression. | `modules/identity/main.tf` |
-| `AZU-0057` | Blob diagnostics use a separate diagnostic setting. The scanner checks account-level properties. | `modules/storage_worm/main.tf` |
-| `AZU-0058` | Development and staging use required ZRS replication. Production uses GZRS. | `modules/storage_worm/main.tf` |
-| `AZU-0060` | This prototype uses platform-managed keys. The client owns future CMK provisioning and rotation. | `modules/storage_worm/main.tf` |
+| Finding    | Reason                                                                                                     | File                                                    |
+| ---------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `AZU-0001` | Front Door restricts web ingress. The worker is private and has no client-facing endpoint.                 | `modules/app_service/main.tf`, `modules/worker/main.tf` |
+| `AZU-0003` | The Node service owns OIDC. App Service authentication would duplicate it. The worker is not user-facing.  | `modules/app_service/main.tf`, `modules/worker/main.tf` |
+| `AZU-0017` | The Key Vault secret expiry comes from the rotating Entra password. Trivy cannot evaluate that expression. | `modules/identity/main.tf`                              |
+| `AZU-0057` | Blob diagnostics use a separate diagnostic setting. The scanner checks account-level properties.           | `modules/storage_worm/main.tf`                          |
+| `AZU-0058` | Development and staging use required ZRS replication. Production uses GZRS.                                | `modules/storage_worm/main.tf`                          |
+| `AZU-0060` | This prototype uses platform-managed keys. The client owns future CMK provisioning and rotation.           | `modules/storage_worm/main.tf`                          |
 
 Each exception has a reason beside its inline Trivy directive.
