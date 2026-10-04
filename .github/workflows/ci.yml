@@ -112,7 +112,7 @@ jobs:
           python-version: '3.12'
       - run: pip install semgrep==1.178.0
       - run: semgrep scan --config p/default --metrics=off --error --severity ERROR
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
