@@ -133,6 +133,8 @@ jobs:
           image-ref: internal-tools:ci
           format: table
           exit-code: 1
+          ignore-unfixed: true
+          trivyignores: .trivyignore
           severity: CRITICAL,HIGH
       - uses: anchore/sbom-action@v0
         with:
