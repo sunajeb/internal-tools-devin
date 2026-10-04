@@ -18,3 +18,4 @@ The app ID, name, hostname, production identity, and staging identity.
 
 App and SCM ingress default to deny. Run the staging `/healthz` check from the deployment runner before a slot swap.
 The app uses managed identity for ACR pulls and Key Vault references.
+Requests from the runner subnet reach the staging slot directly. They do not go through the Front Door WAF or rate limit. Put only the approved apply runner in this subnet.

@@ -92,13 +92,11 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "outbox_failed" {
   evaluation_frequency = "PT5M"
   window_duration      = "PT10M"
   criteria {
-    # This assumes a cumulative counter per instance. If the app emits per-interval values, use sum(value).
+    # outbox_failed_total is a per-interval count. The Azure Monitor OpenTelemetry exporter sends counters with delta temporality.
     query                   = <<-QUERY
       customMetrics
       | where name == "outbox_failed_total"
-      | order by cloud_RoleInstance asc, timestamp asc
-      | extend delta = iff(cloud_RoleInstance == prev(cloud_RoleInstance), value - prev(value), 0.0)
-      | summarize failed = sumif(delta, delta > 0)
+      | summarize failed = sum(value)
     QUERY
     time_aggregation_method = "Maximum"
     metric_measure_column   = "failed"

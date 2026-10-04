@@ -80,6 +80,7 @@ These checks do not create cloud resources. Never run `terraform plan` or `terra
 6. Add an OIDC federated credential for the deployment pipeline. Do not store Azure credentials in GitHub secrets.
 7. Run apply only from the approved deployment pipeline after manual approval.
 8. Run the apply job from a self-hosted runner in the deployment runner subnet. Key Vault and storage disable public access.
+   Requests from the runner subnet reach the staging slot directly. They do not go through the Front Door WAF or rate limit. Put only the approved apply runner in this subnet.
 
 The client owns state storage, access control, recovery, and retention. This repository does not provision or apply the backend.
 
@@ -91,7 +92,7 @@ The client owns state storage, access control, recovery, and retention. This rep
 4. Deploy each release to the staging slot. Run `/healthz` from the deployment runner before swapping slots.
 5. Confirm the production slot serves traffic. Keep the previous slot available for rollback.
 
-The app must emit `outbox_failed_total` for its query alert to detect failed outbox work.
+The app must emit `outbox_failed_total` as an OpenTelemetry counter through the Azure Monitor exporter. The exporter sends the increment for each interval (delta temporality). The alert adds the values in a 10-minute window and fires when the total is more than 0.
 
 ## Client-owned controls
 
