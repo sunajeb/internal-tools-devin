@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { ArrowUpRight, LockKeyhole, Shield, ShieldCheck } from 'lucide-react';
+import { ArrowUpRight, LockKeyhole, Shield } from 'lucide-react';
 import {
   api,
   ErrorState,
@@ -9,6 +9,7 @@ import {
   LoadingState,
   mainContentId,
 } from '@internal-tools/ui-kit';
+import { LedgerlineMark } from './LedgerlineMark.js';
 import { webToolRegistry } from './tool-registry.js';
 
 type User = { id: string; displayName: string; roles: string[] };
@@ -55,7 +56,7 @@ function SignIn() {
     <main className="login-shell">
       <div className="login-brand">
         <div className="brand-mark" aria-hidden="true">
-          <ShieldCheck size={22} />
+          <LedgerlineMark size={18} />
         </div>
         <span>ledgerline</span>
         <small>INTERNAL OPERATIONS</small>
@@ -145,7 +146,7 @@ function Shell({ session, user }: { session: Session; user: User }) {
       <aside className="sidebar" aria-label="Workspace">
         <Link to="/" className="brand-lockup" aria-label="Ledgerline home">
           <div className="brand-mark" aria-hidden="true">
-            <ShieldCheck size={19} />
+            <LedgerlineMark size={16} />
           </div>
           <div>
             <b>ledgerline</b>
