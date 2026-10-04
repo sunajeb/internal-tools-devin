@@ -375,7 +375,18 @@ async function executeRefund(
   }
 }
 
+// Errors that repeat on each attempt: raised by a trigger (P0001), bad
+// data (class 22), or a constraint (class 23). Other errors can be transient.
+function isPermanentError(error: unknown) {
+  const code = (error as { code?: unknown } | null)?.code;
+  return (
+    typeof code === 'string' &&
+    (code === 'P0001' || code.startsWith('22') || code.startsWith('23'))
+  );
+}
+
 async function processWebhooks(pool: pg.Pool) {
+  let transientError: unknown;
   const result = await pool.query(
     `SELECT provider,event_id,event_type,payload FROM foundation.inbound_events
      WHERE processed_at IS NULL AND error IS NULL ORDER BY received_at LIMIT 50`,
@@ -414,6 +425,10 @@ async function processWebhooks(pool: pg.Pool) {
         [event.provider, event.event_id],
       );
     } catch (error) {
+      if (!isPermanentError(error)) {
+        transientError ??= error;
+        continue;
+      }
       await pool.query(
         `UPDATE foundation.inbound_events SET error=$3 WHERE provider=$1 AND event_id=$2`,
         [
@@ -427,6 +442,7 @@ async function processWebhooks(pool: pg.Pool) {
       );
     }
   }
+  if (transientError) throw transientError;
 }
 
 async function processExpiredApprovals(pool: pg.Pool) {

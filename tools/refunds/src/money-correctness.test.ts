@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { refundsTool } from './registry.js';
 import { createPaymentProvider, type PaymentProvider } from './provider.js';
 import { createRefundWorkerRegistration } from './worker.js';
+import { dailyAutoRefundLimitMinor } from './domain.js';
 
 // Integration tests against the docker compose stack (API, worker, Postgres,
 // payment simulator). They skip when the stack is not reachable.
@@ -366,7 +367,7 @@ describe.skipIf(!stackAvailable)(
       const chargeId = await createCharge(1_000_000);
       const responses = await Promise.all(
         Array.from({ length: 20 }, () =>
-          requestRefund(agent, chargeId, 150_000),
+          requestRefund(supervisor, chargeId, 150_000),
         ),
       );
       const statuses = responses.map((response) => response.status).sort();
@@ -406,16 +407,20 @@ describe.skipIf(!stackAvailable)(
 
     it('C3 daily limit: auto-tier refunds stop at 2,000.00 for each agent, also under concurrency', async () => {
       const dailyAgent = await signIn('daily-agent', ['agent']);
-      const chargeId = await createCharge(1_000_000);
+      // The tier uses the total refund for each charge (SR-02). Thus each
+      // auto-tier request uses a new charge.
+      const chargeIds = await Promise.all(
+        Array.from({ length: 12 }, () => createCharge(100_000)),
+      );
       const responses = await Promise.all(
-        Array.from({ length: 10 }, () =>
-          requestRefund(dailyAgent, chargeId, 25_000),
-        ),
+        chargeIds
+          .slice(0, 10)
+          .map((chargeId) => requestRefund(dailyAgent, chargeId, 25_000)),
       );
       const statuses = responses.map((response) => response.status);
       expect(statuses.filter((status) => status === 201)).toHaveLength(8);
       expect(statuses.filter((status) => status === 422)).toHaveLength(2);
-      const extra = await requestRefund(dailyAgent, chargeId, 1);
+      const extra = await requestRefund(dailyAgent, chargeIds[10]!, 1);
       expect(extra.status).toBe(422);
       const totals = await owner.query(
         `SELECT auto_minor::text FROM refunds.agent_daily_totals
@@ -423,19 +428,31 @@ describe.skipIf(!stackAvailable)(
         [dailyAgent.userId],
       );
       expect(totals.rows[0].auto_minor).toBe('200000');
-      expect((await chargeRow(chargeId)).refunded_minor).toBe('200000');
+      const charged = await owner.query(
+        `SELECT coalesce(sum(refunded_minor),0)::text AS total
+         FROM refunds.charges WHERE id = ANY($1::text[])`,
+        [chargeIds],
+      );
+      expect(charged.rows[0].total).toBe('200000');
       // Supervisor-tier requests do not count toward the auto-tier limit.
-      const supervisorTier = await requestRefund(dailyAgent, chargeId, 25_001);
+      const supervisorTier = await requestRefund(
+        dailyAgent,
+        chargeIds[11]!,
+        25_001,
+      );
       expect(supervisorTier.status).toBe(201);
       expect(supervisorTier.body.status).toBe('pending_approval');
     });
 
     it('C4 policy tiers at the boundaries and two different approvers for dual tier', async () => {
-      const chargeId = await createCharge(2_000_000);
-      const auto = await requestRefund(supervisor, chargeId, 25_000);
-      const low = await requestRefund(supervisor, chargeId, 25_001);
-      const high = await requestRefund(supervisor, chargeId, 500_000);
-      const dual = await requestRefund(supervisor, chargeId, 500_001);
+      // The tier uses the total refund for each charge (SR-02). Thus each
+      // boundary request uses a new charge.
+      const tierRequest = async (amountMinor: number, client = supervisor) =>
+        requestRefund(client, await createCharge(1_000_000), amountMinor);
+      const auto = await tierRequest(25_000);
+      const low = await tierRequest(25_001);
+      const high = await tierRequest(500_000);
+      const dual = await tierRequest(500_001);
       expect([auto.status, low.status, high.status, dual.status]).toEqual([
         201, 201, 201, 201,
       ]);
@@ -453,7 +470,7 @@ describe.skipIf(!stackAvailable)(
         'pending_approval',
       ]);
       expect(dual.body.approvalSteps).toEqual([['supervisor'], ['finance']]);
-      const agentDual = await requestRefund(agent, chargeId, 500_001);
+      const agentDual = await tierRequest(500_001, agent);
       expect(agentDual.status).toBe(403);
 
       const policyVersion = (
@@ -549,6 +566,22 @@ describe.skipIf(!stackAvailable)(
     });
 
     it('C5 provider timeout then retry creates exactly one provider refund', async () => {
+      // The fault applies to the next provider call. Wait until no earlier
+      // refund of this run can take it.
+      await waitFor(
+        'earlier refund executions to finish',
+        async () =>
+          (
+            await owner.query(
+              `SELECT count(*)::int AS count FROM foundation.outbox o
+               JOIN refunds.refunds r ON r.id::text=o.idempotency_key
+               WHERE o.kind='refund.execute' AND o.status NOT IN ('done','failed')
+                 AND r.requester_id LIKE $1`,
+              [`mc-${run}-%`],
+            )
+          ).rows[0].count as number,
+        (count) => count === 0,
+      );
       // a) Injected transient timeout (HTTP 503) before the provider records the refund.
       await simulatorAdmin('/admin/faults', { fault: 'timeout-then-succeed' });
       const chargeId = await createCharge(100_000);
@@ -1044,6 +1077,34 @@ describe.skipIf(!stackAvailable)(
       expect(providerCalls).toBe(0);
       expect((await refundRow(pending.body.id)).status).toBe('rejected');
     });
+
+    it('R policy_versions has refund policy version 3 as the only active version', async () => {
+      const policy = refundsTool.approvalRules['refund.execute'] as {
+        version: number;
+        expiresAfterHours: number;
+      };
+      const versions = await owner.query(
+        `SELECT version,state,configuration FROM foundation.policy_versions
+         WHERE tool_id='refunds' ORDER BY version`,
+      );
+      const active = versions.rows.filter((row) => row.state === 'active');
+      expect(active.map((row) => row.version)).toEqual([policy.version]);
+      expect(active[0].configuration).toMatchObject({
+        autoLimitMinor: 25_000,
+        supervisorLimitMinor: 500_000,
+        dailyLimitMinor: Number(dailyAutoRefundLimitMinor),
+        expiresAfterHours: policy.expiresAfterHours,
+      });
+      const known = new Set(versions.rows.map((row) => row.version));
+      const stored = await owner.query(
+        `SELECT DISTINCT policy_version FROM refunds.refunds WHERE requester_id LIKE $1`,
+        [`mc-${run}-%`],
+      );
+      expect(stored.rows.length).toBeGreaterThan(0);
+      for (const row of stored.rows) {
+        expect(known.has(row.policy_version)).toBe(true);
+      }
+    });
   },
 );
 
@@ -1072,5 +1133,58 @@ describe('Refunds approval policy matches the system design', () => {
     expect(tierFor(25_001n)).toBe('supervisor');
     expect(tierFor(500_000n)).toBe('supervisor');
     expect(tierFor(500_001n)).toBe('dual');
+  });
+});
+
+describe('Refunds webhook processing after errors', () => {
+  function webhookRun(lookupError: Error) {
+    const updates: string[] = [];
+    const pool = {
+      query: async (sql: string, params: unknown[] = []) => {
+        if (sql.includes('FROM foundation.inbound_events')) {
+          return {
+            rows: ['1', '2'].map((index) => ({
+              provider: 'simulator',
+              event_id: `evt-${index}`,
+              event_type: 'refund.succeeded',
+              payload: { data: { refundId: `refund-${index}` } },
+            })),
+          };
+        }
+        if (sql.includes('FROM refunds.refunds') && params[0] === 'refund-1') {
+          throw lookupError;
+        }
+        if (sql.includes('UPDATE foundation.inbound_events')) {
+          updates.push(
+            `${sql.includes('error=') ? 'error' : 'processed'}:${String(params[1])}`,
+          );
+        }
+        return { rows: [] };
+      },
+    } as unknown as pg.Pool;
+    const run = createRefundWorkerRegistration(pool, {
+      listRefunds: async () => [],
+      createRefund: async () => ({ id: 'unused', status: 'pending' }),
+    }).reconcilers!['refunds.webhooks']!;
+    return { run, updates };
+  }
+
+  it('keeps an event for retry after a transient error and processes later events', async () => {
+    const { run, updates } = webhookRun(
+      new Error('Connection terminated unexpectedly'),
+    );
+    await expect(run(undefined)).rejects.toThrow(/Connection terminated/);
+    expect(updates).toEqual(['processed:evt-2']);
+  });
+
+  it('records a permanent error, skips the event, and processes later events', async () => {
+    const { run, updates } = webhookRun(
+      Object.assign(
+        new Error('invalid refund transition: approved -> succeeded'),
+        { code: 'P0001' },
+      ),
+    );
+    await run(undefined);
+    expect(updates).toEqual(['error:evt-1', 'processed:evt-2']);
   });
 });
