@@ -121,6 +121,58 @@ describe('route permission declaration', () => {
   });
 });
 
+describe('mandatory audit', () => {
+  it('rolls back and fails a mutating route that writes no audit event', async () => {
+    const registration = toolRegistrations[0]!;
+    const app = Fastify({ logger: false });
+    configureFoundation(app, {
+      pool: harness.runtime,
+      currentUser: async () => ({
+        id: 'audit-test-agent',
+        displayName: 'Audit test agent',
+        roles: ['agent'],
+      }),
+      verifyCsrf: () => true,
+    });
+    registerTool(app, {
+      ...registration,
+      routes: [
+        defineRoute({
+          method: 'POST',
+          path: '/api/sec-unaudited',
+          permission: 'refund.request',
+          handler: async () => ({ ok: true }),
+        }),
+        defineRoute({
+          method: 'POST',
+          path: '/api/sec-audited',
+          permission: 'refund.request',
+          handler: async (ctx) => {
+            await ctx.audit({
+              action: 'test.audited',
+              objectType: 'test',
+              objectId: 'audit-test',
+              result: 'success',
+            });
+            return { ok: true };
+          },
+        }),
+      ],
+    });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sec-unaudited',
+    });
+    expect(response.statusCode).toBe(500);
+    const audited = await app.inject({
+      method: 'POST',
+      url: '/api/sec-audited',
+    });
+    expect(audited.statusCode).toBe(200);
+    await app.close();
+  });
+});
+
 describe('self-approval and approval steps', () => {
   it('denies self-approval by the dual-role user and audits it', async () => {
     const chargeId = await harness.charge(100_000n);

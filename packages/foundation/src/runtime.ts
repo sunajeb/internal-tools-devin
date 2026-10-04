@@ -404,7 +404,22 @@ async function runRegisteredRoute(
           user,
           parsed,
         );
+        let auditEvents = 0;
+        const writeAudit = context.audit;
+        context.audit = (event) => {
+          auditEvents += 1;
+          return writeAudit(event);
+        };
         const response = routeResponse(await route.handler(context as never));
+        if (
+          route.method !== 'GET' &&
+          response.statusCode < 400 &&
+          auditEvents === 0
+        ) {
+          throw new Error(
+            `${route.method} ${route.path} changed state without an audit event.`,
+          );
+        }
         if (idempotency) {
           await client.query(
             `UPDATE foundation.idempotency_keys
