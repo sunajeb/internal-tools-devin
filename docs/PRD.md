@@ -72,7 +72,7 @@ Two Power Apps capabilities have no equal in the Foundation:
 | ID | Goal | Measure |
 |---|---|---|
 | G-1 | Each tool gets all Foundation controls with no extra code | The Feature-Flag Panel contains no auth, audit, approval or logging code of its own |
-| G-2 | A new tool is fast to add | A simple tool goes from request to merged PR in 1 day or less (Devin time plus review) |
+| G-2 | A new tool is fast to add | A simple tool goes from request to merged PR in 1 day or less (build plus review) |
 | G-3 | No duplicate money movement | 0 duplicate provider refunds for each refund record |
 | G-4 | No action without the correct approval | 100% of executed actions have the approvals that the policy requires |
 | G-5 | Full traceability | 100% of state changes, personal-data reveals and exports have an audit event |
@@ -275,8 +275,8 @@ The priority uses MoSCoW: **M** = must, **S** = should, **C** = could.
 | Refund amount | Who can request | Approval needed |
 |---|---|---|
 | Up to 250.00 | Support Agent | None. Executes at once. Counts toward the daily limit. |
-| More than 250.00 to 5,000.00 | Support Agent | One Supervisor |
-| More than 5,000.00 | Support Agent or Supervisor | One Supervisor and one Finance Approver, in any order |
+| More than 250.00 to 5,000.00 | Support Agent or Supervisor | One Supervisor |
+| More than 5,000.00 | Supervisor only | One Supervisor, then one Finance Approver, in this order |
 | Always | — | No self-approval. Total refunds must not exceed the charge. Reason code required. Values are configuration. |
 
 ### 8.2 Requirements
@@ -332,8 +332,9 @@ Rules:
 | Resolve exception | No | No | Yes | No | No |
 | Export | No | No | Yes | Yes | No |
 | Read and verify audit | No | No | No | Yes | Yes |
-| Propose or approve policy change | No | No | Yes (not own) | No | Yes (not own) |
 | Pause execution | No | No | No | No | Yes |
+
+The prototype has no in-app policy change. Policy values change through a reviewed pull request (FR-APR-9 is not built).
 
 ---
 
@@ -350,7 +351,7 @@ This tool is small on purpose. It proves G-1 and G-2.
 | FR-FF-5 | Services must read flags through a read-only API with a service token. | S |
 | FR-FF-6 | The tool must contain no authentication, authorization, audit, approval or logging code of its own. It must use the Foundation. | M |
 
-**KYC review queue (future).** The KYC queue will use the same Foundation: data classes and masking for documents and personal data, the approval engine for escalations, keyset search over the full queue, and the audit log for each document view.
+**Example of a future tool: KYC review queue.** No KYC tool exists in the prototype. A KYC queue could use the same Foundation: data classes and masking for documents and personal data, the approval engine for escalations, keyset search over the full queue, and the audit log for each document view.
 
 ---
 
@@ -430,14 +431,14 @@ Layer key: **F** = Foundation (all tools get it). **T** = tool-specific.
 |---|---|---|---|---|
 | Identity | SSO through OIDC | F | FR-ID-1 | Simulated (Keycloak). Production: Entra ID |
 | Identity | MFA and Conditional Access | F | FR-ID-2 | Client (IdP policy) |
-| Identity | Deprovisioning through IdP groups | F | FR-ID-5, FR-ID-6 | Built (group claims). Client (SCIM to IdP) |
+| Identity | Deprovisioning through IdP groups | F | FR-ID-5, FR-ID-6 | Built (roles from group claims at sign-in). Not built: IdP re-check during a session (FR-ID-6). Client (SCIM to IdP) |
 | Identity | Session timeouts | F | FR-ID-4 | Built |
 | Access | Route-level permissions, deny by default | F | FR-AZ-1 to FR-AZ-3 | Built |
 | Access | Generated permission matrix tests | F | FR-AZ-4 | Built |
 | Access | Separation of duties | F | FR-APR-2, FR-APR-3 | Built |
-| Access | Quarterly access review | F | FR-GP-5 | Built (registry report). Client (process) |
+| Access | Quarterly access review | F | FR-GP-5 | Built (`GET /api/registry` lists tools, owners and roles). Client (process) |
 | Access | Break-glass access | F | — | Documented. Client (IdP) |
-| Approvals | Tiered maker-checker engine | F | FR-APR-1 to FR-APR-9 | Built |
+| Approvals | Tiered maker-checker engine | F | FR-APR-1 to FR-APR-9 | Built, except notifications (FR-APR-8) and in-app policy change approval (FR-APR-9) |
 | Money | Integer minor units, currency code | T | FR-RF-5 | Built |
 | Money | Over-refund rule in database | T | FR-RF-4 | Built |
 | Side effects | Idempotent API | F | FR-SE-1 | Built |
@@ -462,10 +463,10 @@ Layer key: **F** = Foundation (all tools get it). **T** = tool-specific.
 | Reliability | Health checks, graceful stop | F | FR-OB-5 | Built |
 | Reliability | Backups, point-in-time restore, geo-redundant backup | F | NFR-AV-2 | Documented (Terraform) |
 | Reliability | Zone-redundant database HA | F | NFR-AV-1 | Documented (Terraform) |
-| Reliability | Zero-downtime deploy | F | NFR-AV-4, FR-CI-7 | Documented (slots). Built (migration rules) |
-| Reliability | DR test | F | NFR-AV-3 | Client |
-| Observability | Logs, traces, metrics | F | FR-OB-1 to FR-OB-3 | Built |
-| Observability | Alerts and runbooks | F, T | FR-OB-4 | Built (rules, runbooks). Client (pager) |
+| Reliability | Zero-downtime deploy | F | NFR-AV-4, FR-CI-7 | Documented (slots and expand-and-contract rule). Not tested |
+| Reliability | DR test | F | NFR-AV-3 | Client. No disaster recovery test or measurement exists |
+| Observability | Logs, traces, metrics | F | FR-OB-1 to FR-OB-3 | Built: JSON logs with request ID, and 4 gauges (`approvals_pending`, `outbox_depth`, `reconciliation_exceptions_open`, `execution_paused`). Not built: OpenTelemetry traces (FR-OB-2), request rate, error and latency metrics |
+| Observability | Alerts and runbooks | F, T | FR-OB-4 | Built (runbooks). Documented (alert rules in Terraform `alerts` module, not applied). Client (pager) |
 | Operations | On-call rotation | F | — | Client. Devin Automations can triage. |
 | Operations | Maintenance automation | F | FR-OB-6, FR-CI-6 | Built (Dependabot). Documented (Devin Automation) |
 | Governance | Tool registry and owners | F | FR-GP-5, NFR-MNT-3 | Built |
@@ -490,9 +491,9 @@ Layer key: **F** = Foundation (all tools get it). **T** = tool-specific.
 6. **Webhook out of order.** Given `refund.succeeded` arrives before `refund.pending`. Then R stays `succeeded`.
 7. **Reconciliation exception.** Given the provider has a refund that the system does not have. When reconciliation runs, then an exception of type `missing_internal` appears in the Finance queue.
 8. **Tamper evidence.** Given a database administrator changes an audit row directly, with triggers disabled. When an Auditor runs verify, then verify reports the first broken event ID.
-9. **Kill switch.** Given a Platform Admin pauses refunds execution. Then approved refunds stay `approved` until resume, and an alert shows the pause.
-10. **Route without permission.** Given a developer adds a route with no permission. Then CI fails.
-11. **New tool inherits controls.** Given a separate Devin session builds the Feature-Flag Panel from the playbook. Then the PR adds only tool files (registry entry, routes, migration, pages, tests). The production flag change needs approval, writes audit events and appears in traces, with no new auth, audit, approval or logging code.
+9. **Kill switch.** Given a Platform Admin pauses refunds execution. Then approved refunds stay `approved` until resume. A banner and the metric `execution_paused` show the pause.
+10. **Route without permission.** Given a developer adds a route with no permission. Then the API does not start and the tests fail.
+11. **New tool inherits controls.** Given a separate Devin session builds the Feature-Flag Panel from the playbook. Then the PR adds only tool files (registry entry, routes, migration, pages, tests). The production flag change needs approval, writes audit events, with no new auth, audit, approval or logging code.
 
 ---
 
@@ -513,19 +514,17 @@ Layer key: **F** = Foundation (all tools get it). **T** = tool-specific.
 
 ## 14. Delivery plan
 
-### 14.1 Prototype (about 2 hours of Devin time)
+### 14.1 Prototype
 
-| Step | Devin minutes | Human-equivalent (estimate) |
-|---|---|---|
-| Foundation core: compose stack, Postgres, migrations, Keycloak sign-in, policy, approval engine, audit chain, idempotency, outbox, worker | 35 | 7 to 9 days |
-| Refunds domain: policy tiers, limits, database rules, payment simulator, webhooks, reconciliation | 30 | 5 to 7 days |
-| UI kit and Refunds pages: search, request, inbox, audit viewer, exceptions | 20 | 3 to 4 days |
-| CI with security gates, Terraform, observability | 15 | 3 to 4 days |
-| Tool template, registry, Devin playbook, README, threat model, runbooks | 5 | 2 days |
-| Feature-Flag Panel, built by a separate Devin session from the playbook | 15 | 2 to 3 days |
-| **Total** | **120** | **about 5 to 6 weeks** |
+The prototype contains the Foundation, the Refunds Console and the Feature-Flag Panel. The README status table lists what is built, simulated, documented and client-owned.
 
-The human-equivalent values are estimates, not measurements. The README will record the actual Devin time, usage and human review time.
+Known limits of the prototype:
+
+- The audit hash chain is not keyed. Production needs an external head anchor.
+- Exactly-once applies to one refund ID, not to one customer intent.
+- There is no live Azure deployment. The Terraform is validated only.
+- The payment provider is simulated. No KYC vendor integration exists.
+- There is no measured cost and no tested disaster recovery.
 
 ### 14.2 Path to production
 

@@ -15,14 +15,14 @@ The browser is untrusted. API input is untrusted. Only the IdP authenticates a u
 
 ## STRIDE
 
-| Threat                 | Example                                                           | Control                                                                                                                     |
-| ---------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Spoofing               | A forged webhook claims that a refund succeeded.                  | Check the HMAC signature and timestamp. Store each provider event once. Reconcile with provider records.                    |
-| Tampering              | A database operator changes an audit event.                       | Append-only trigger, SHA-256 chain, transaction advisory lock and hourly anchor export. Verify and alert on a broken chain. |
-| Repudiation            | An approver denies an approval.                                   | Record actor, roles, request ID, source IP, user agent, result and event hash.                                              |
-| Information disclosure | An agent exports customer email addresses.                        | Server-side export permission, masking, audited reveal and export. Do not store PAN or bank account numbers.                |
-| Denial of service      | An attacker floods the approval or search endpoints.              | Rate limits, bounded request sizes, query timeout, WAF in production and operational alerts.                                |
-| Elevation of privilege | A user with Agent and Supervisor roles approves their own refund. | Server-side permission checks, requester comparison, unique approval constraints and audit of denied attempts.              |
+| Threat                 | Example                                                           | Control                                                                                                                                                                                                                                                                                                                                                |
+| ---------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Spoofing               | A forged webhook claims that a refund succeeded.                  | Check the HMAC signature and timestamp. Store each provider event once. Reconcile with provider records.                                                                                                                                                                                                                                               |
+| Tampering              | A database operator changes an audit event.                       | Runtime role without `UPDATE` or `DELETE`, append-only trigger, SHA-256 chain and transaction advisory lock. **Verify chain** finds the first broken event. The hash is not keyed: an owner who rewrites the full chain is not detected. Production needs an external immutable copy of the chain head. The prototype has no head export and no alert. |
+| Repudiation            | An approver denies an approval.                                   | Record actor, roles, request ID, source IP, user agent, result and event hash.                                                                                                                                                                                                                                                                         |
+| Information disclosure | An agent exports customer email addresses.                        | Server-side export permission, masking, audited reveal and export. Do not store PAN or bank account numbers.                                                                                                                                                                                                                                           |
+| Denial of service      | An attacker floods the approval or search endpoints.              | Rate limit (200 requests each minute), bounded request sizes and a 5-second statement timeout. A WAF and alerts are production work.                                                                                                                                                                                                                   |
+| Elevation of privilege | A user with Agent and Supervisor roles approves their own refund. | Server-side permission checks, requester comparison, unique approval constraints and audit of denied attempts.                                                                                                                                                                                                                                         |
 
 ## Abuse cases
 
@@ -35,3 +35,11 @@ The browser is untrusted. API input is untrusted. Only the IdP authenticates a u
 ## Residual risk
 
 The local simulator, development identity provider and local secrets do not prove production controls. Production requires managed secrets, TLS, network isolation, WORM storage, SIEM forwarding, penetration testing and a provider contract test.
+
+Known limits:
+
+- The audit hash chain is not keyed. It needs an external head anchor.
+- Exactly-once applies to one refund ID, not to one customer intent.
+- All tools share the database role `app_runtime`. A defect in one tool can reach the data of other tools.
+- The API does not re-check the IdP during a session. Removed users keep access until the session ends (30 minutes idle, 8 hours total).
+- The payment provider is simulated. There is no live Azure deployment. The Terraform is validated only.
