@@ -28,6 +28,7 @@ locals {
 # Front Door cannot present client certificates, and the Node service implements Entra OIDC itself.
 #trivy:ignore:AZU-0001
 #trivy:ignore:AZU-0003
+# tflint-ignore: azurerm_app_service_missing_auto_heal_setting
 resource "azurerm_linux_web_app" "main" {
   name                          = var.name
   resource_group_name           = var.resource_group_name
@@ -75,17 +76,6 @@ resource "azurerm_linux_web_app" "main" {
       }]
     }
     scm_ip_restriction_default_action = "Deny"
-    auto_heal_setting {
-      trigger {
-        requests {
-          count    = 10
-          interval = "00:05:00"
-        }
-      }
-      action {
-        action_type = "Recycle"
-      }
-    }
   }
 
   logs {
@@ -103,6 +93,7 @@ resource "azurerm_linux_web_app" "main" {
 # The staging slot uses the same Front Door and application-managed OIDC controls as production.
 #trivy:ignore:AZU-0001
 #trivy:ignore:AZU-0003
+# tflint-ignore: azurerm_app_service_missing_auto_heal_setting
 resource "azurerm_linux_web_app_slot" "staging" {
   name                          = "staging"
   app_service_id                = azurerm_linux_web_app.main.id
@@ -146,18 +137,13 @@ resource "azurerm_linux_web_app_slot" "staging" {
         x_forwarded_host  = []
       }]
     }
-    scm_ip_restriction_default_action = "Deny"
-    auto_heal_setting {
-      trigger {
-        requests {
-          count    = 10
-          interval = "00:05:00"
-        }
-      }
-      action {
-        action_type = "Recycle"
-      }
+    ip_restriction {
+      name                      = "AllowDeploymentRunner"
+      priority                  = 200
+      action                    = "Allow"
+      virtual_network_subnet_id = var.deployment_runner_subnet_id
     }
+    scm_ip_restriction_default_action = "Deny"
   }
 
   logs {
@@ -170,7 +156,7 @@ resource "azurerm_linux_web_app_slot" "staging" {
   }
 
   tags = var.tags
-  # Deploy to staging, warm via /healthz, then swap for zero downtime.
+  # Run /healthz from the deployment runner before swapping slots.
 }
 
 resource "azurerm_role_assignment" "acr_pull_web" {

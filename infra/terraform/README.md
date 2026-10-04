@@ -31,7 +31,7 @@ flowchart TD
 
 | Module | Purpose |
 | --- | --- |
-| `network` | Virtual network, delegated subnets, security groups, and private DNS |
+| `network` | Virtual network, app, data, and deployment runner subnets, security groups, and private DNS |
 | `postgres` | Private PostgreSQL Flexible Server, database, Entra administrator, and diagnostics |
 | `app_service` | Web app, staging slot, Front Door ingress restriction, and ACR permissions |
 | `worker` | Private worker App Service with managed identity |
@@ -41,7 +41,7 @@ flowchart TD
 | `alerts` | Web, database, and outbox metric alerts |
 | `storage_worm` | Private immutable audit-anchor storage |
 | `front_door` | Front Door Premium, WAF, HTTPS route, and diagnostics |
-| `identity` | Entra OIDC application and rotating client secret |
+| `identity` | Entra OIDC application, allowed-group assignments, and rotating client secret |
 
 Each environment defines its own backend key and resource settings. The `dev`, `staging`, and `prod` roots use separate state.
 
@@ -79,7 +79,7 @@ These checks do not create cloud resources. Never run `terraform plan` or `terra
 5. Configure a deployment pipeline with GitHub environment `prod` and required reviewers.
 6. Add an OIDC federated credential for the deployment pipeline. Do not store Azure credentials in GitHub secrets.
 7. Run apply only from the approved deployment pipeline after manual approval.
-8. Run the apply job from a self-hosted runner in the VNet. Key Vault and storage disable public access.
+8. Run the apply job from a self-hosted runner in the deployment runner subnet. Key Vault and storage disable public access.
 
 The client owns state storage, access control, recovery, and retention. This repository does not provision or apply the backend.
 
@@ -88,7 +88,7 @@ The client owns state storage, access control, recovery, and retention. This rep
 1. Create the `session-secret` value in Key Vault outside Terraform.
 2. Connect to PostgreSQL with an Entra administrator. Create web app, staging slot, and worker principals with `pgaadauth_create_principal`.
 3. Push the first application image to ACR from an authorized GitHub-hosted runner.
-4. Deploy each release to the staging slot. Warm `/healthz` and check logs before swapping slots.
+4. Deploy each release to the staging slot. Run `/healthz` from the deployment runner before swapping slots.
 5. Confirm the production slot serves traffic. Keep the previous slot available for rollback.
 
 The app must emit `outbox_failed_total` for its query alert to detect failed outbox work.
@@ -98,10 +98,12 @@ The app must emit `outbox_failed_total` for its query alert to detect failed out
 - Provide the Azure subscription, landing zone, network ranges, and resource policies.
 - Bootstrap the state storage account and define its access and recovery policies.
 - Grant tenant admin consent for the Microsoft Graph permissions.
+- Own the Entra security groups that may sign in.
 - Own DNS, the custom domain, and TLS certificates when configured.
 - Maintain action group recipients and on-call coverage.
 - Review service cost and capacity. Run PostgreSQL backup restore drills.
-- Own secret rotation operations and review the Terraform state exposure risk.
+- Run an approved apply at least monthly to rotate the OIDC password on time.
+- The password expires 180 days after its rotation due time. Restrict Terraform state access.
 
 ## Security controls
 

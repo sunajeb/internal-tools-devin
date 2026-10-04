@@ -30,6 +30,10 @@ variable "postgres_prefix" {
   type = string
 }
 
+variable "runner_prefix" {
+  type = string
+}
+
 variable "tags" {
   type = map(string)
 }

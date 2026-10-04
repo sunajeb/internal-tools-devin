@@ -90,9 +90,16 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "outbox_failed" {
   description          = "Outbox delivery failures were reported."
   severity             = 2
   evaluation_frequency = "PT5M"
-  window_duration      = "PT5M"
+  window_duration      = "PT10M"
   criteria {
-    query                   = "customMetrics | where name == \"outbox_failed_total\" | summarize failed = max(value)"
+    # This assumes a cumulative counter per instance. If the app emits per-interval values, use sum(value).
+    query                   = <<-QUERY
+      customMetrics
+      | where name == "outbox_failed_total"
+      | order by cloud_RoleInstance asc, timestamp asc
+      | extend delta = iff(cloud_RoleInstance == prev(cloud_RoleInstance), value - prev(value), 0.0)
+      | summarize failed = sumif(delta, delta > 0)
+    QUERY
     time_aggregation_method = "Maximum"
     metric_measure_column   = "failed"
     operator                = "GreaterThan"

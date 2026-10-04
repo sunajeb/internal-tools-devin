@@ -18,6 +18,10 @@ output "postgres_subnet_id" {
   value = azurerm_subnet.main["postgres"].id
 }
 
+output "runner_subnet_id" {
+  value = azurerm_subnet.main["runner"].id
+}
+
 output "postgres_dns_zone_id" {
   value = azurerm_private_dns_zone.main["privatelink.postgres.database.azure.com"].id
 }
@@ -32,4 +36,8 @@ output "blob_dns_zone_id" {
 
 output "postgres_dns_zone_link_id" {
   value = azurerm_private_dns_zone_virtual_network_link.main["privatelink.postgres.database.azure.com"].id
+}
+
+output "key_vault_dns_zone_link_id" {
+  value = azurerm_private_dns_zone_virtual_network_link.main["privatelink.vaultcore.azure.net"].id
 }
